@@ -1,0 +1,41 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { supabaseAdmin } from '@/lib/supabase/server';
+import { requireAdmin } from '@/lib/auth';
+
+// Admin-only: read or update the payment accounts shown to donors
+// (Swish number, Bankgiro, IBAN). Single row, id='main'.
+export async function GET(req: NextRequest) {
+  const guard = await requireAdmin(req);
+  if (guard) return guard;
+
+  const supabase = supabaseAdmin();
+  const { data, error } = await supabase.from('campaign_settings').select('*').eq('id', 'main').single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ settings: data });
+}
+
+export async function PUT(req: NextRequest) {
+  const guard = await requireAdmin(req);
+  if (guard) return guard;
+
+  const { swishNumber, bankgiro, iban, isLive, pausedMessage, transparencyFiles } = await req.json();
+  const supabase = supabaseAdmin();
+  const { data, error } = await supabase
+    .from('campaign_settings')
+    .update({
+      swish_number: swishNumber,
+      bankgiro,
+      iban,
+      is_live: isLive,
+      paused_message: pausedMessage,
+      transparency_files: Array.isArray(transparencyFiles) ? transparencyFiles : [],
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', 'main')
+    .select()
+    .single();
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  return NextResponse.json({ settings: data });
+}
