@@ -2,19 +2,25 @@
 
 import { useEffect, useState } from 'react';
 import { fmtSEK } from '@/lib/format';
-import { Donation, Donor, PaymentPlan, CampaignSettings, BroadcastLogEntry } from '@/lib/types';
+import NotificationPanel from '@/components/NotificationPanel';
+import BroadcastPanel from '@/components/BroadcastPanel';
+import DonorDetails from '@/components/DonorDetails';
+import AdminIcon, { AdminIconName } from '@/components/AdminIcon';
+import { donorSummary, notificationChoices, planProgress } from '@/lib/donors';
+import { Donation, Donor, PaymentPlan, CampaignSettings } from '@/lib/types';
 
-type Tab = 'overview' | 'donations' | 'donors' | 'pending' | 'plans' | 'broadcast' | 'settings' | 'reports';
+type Tab = 'overview' | 'donations' | 'donors' | 'pending' | 'plans' | 'broadcast' | 'notifications' | 'settings' | 'reports';
 
-const NAV: { key: Tab; label: string; icon: string }[] = [
-  { key: 'overview', label: 'Översikt', icon: '📊' },
-  { key: 'donations', label: 'Donationslogg', icon: '🧾' },
-  { key: 'donors', label: 'Givare', icon: '👥' },
-  { key: 'pending', label: 'Väntande godkännanden', icon: '⏳' },
-  { key: 'plans', label: 'Betalningsplaner', icon: '📅' },
-  { key: 'broadcast', label: 'Utskick', icon: '📣' },
-  { key: 'settings', label: 'Betalkonton', icon: '⚙️' },
-  { key: 'reports', label: 'Rapporter', icon: '📁' }
+const NAV: { key: Tab; label: string }[] = [
+  { key: 'overview', label: 'Översikt' },
+  { key: 'donations', label: 'Donationslogg' },
+  { key: 'donors', label: 'Givare' },
+  { key: 'pending', label: 'Väntande godkännanden' },
+  { key: 'plans', label: 'Betalningsplaner' },
+  { key: 'broadcast', label: 'Utskick' },
+  { key: 'notifications', label: 'WhatsApp-aviseringar' },
+  { key: 'settings', label: 'Betalkonton' },
+  { key: 'reports', label: 'Rapporter' }
 ];
 
 const STATUS_SV: Record<string, string> = { confirmed: 'bekräftad', pending: 'väntande', rejected: 'avvisad' };
@@ -102,7 +108,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="flex min-h-screen bg-mosque-cream">
-      <div className={`flex flex-shrink-0 flex-col gap-0.5 bg-mosque-deep p-3 text-mosque-cream transition-all duration-200 ${sidebarOpen ? 'w-60 p-4' : 'w-16 items-center'}`}>
+      <div className={`flex flex-shrink-0 flex-col gap-0.5 bg-mosque-deep p-3 text-mosque-cream transition-all duration-200 ${sidebarOpen ? 'w-72 p-4' : 'w-16 items-center'}`}>
         <div className={`mb-5 flex items-center border-b border-white/10 pb-5 ${sidebarOpen ? 'justify-between gap-2.5 px-2' : 'flex-col gap-3'}`}>
           <div className="flex items-center gap-2.5">
             <img src="/logo.png" alt="Masjid Al-Rahma" className="h-10 w-10 flex-shrink-0" />
@@ -118,38 +124,43 @@ export default function AdminDashboard() {
             aria-label={sidebarOpen ? 'Stäng sidopanelen' : 'Öppna sidopanelen'}
             className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-mosque-cream/70 hover:bg-white/10"
           >
-            {sidebarOpen ? '‹' : '›'}
+            <AdminIcon name={sidebarOpen ? 'collapse' : 'expand'} className="h-4 w-4" />
           </button>
         </div>
 
+        {sidebarOpen && <p className="mb-3 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-mosque-mint/50">Administration</p>}
         {NAV.map((item) => (
           <button
             key={item.key}
             onClick={() => setTab(item.key)}
             title={item.label}
-            className={`flex items-center gap-2.5 rounded-lg py-2.5 text-left text-sm font-semibold ${sidebarOpen ? 'px-3' : 'justify-center px-0'} ${
-              tab === item.key ? 'bg-mosque-gold/90 text-mosque-deep' : 'text-mosque-cream/85'
+            aria-label={item.label}
+            aria-current={tab === item.key ? 'page' : undefined}
+            className={`flex items-center gap-3 rounded-xl py-3 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mosque-gold ${sidebarOpen ? 'px-3' : 'justify-center px-0'} ${
+              tab === item.key ? 'bg-white/10 text-white ring-1 ring-white/15 shadow-sm' : 'text-mosque-cream/65 hover:bg-white/5 hover:text-white'
             }`}
           >
-            <span>{item.icon}</span>
+            <AdminIcon name={item.key} />
             {sidebarOpen && item.label}
+            {sidebarOpen && item.key === 'pending' && pending.length > 0 && <span className="ml-auto rounded-md bg-mosque-gold/20 px-2 py-0.5 text-xs text-mosque-gold">{pending.length}</span>}
           </button>
         ))}
       </div>
 
-      <div className="min-w-0 flex-1 p-10">
+      <div className="min-w-0 flex-1 p-5 sm:p-8 lg:p-10">
         {loading ? (
           <div className="text-sm text-mosque-ink/50">Laddar…</div>
         ) : (
           <>
+            {tab === 'notifications' && <NotificationPanel />}
             {tab === 'overview' && (
               <Overview raised={raised} goal={goal} pct={pct} donorCount={donors.length} pendingCount={pending.length} planCount={plans.length} recent={confirmed.slice(0, 5)} />
             )}
             {tab === 'donations' && <DonationsLog donations={donations} onRefresh={refresh} />}
-            {tab === 'donors' && <Donors donors={donors} onRefresh={refresh} />}
+            {tab === 'donors' && <Donors donors={donors} donations={donations} plans={plans} onRefresh={refresh} />}
             {tab === 'pending' && <Pending pending={pending} onDecide={approve} />}
-            {tab === 'plans' && <Plans plans={plans} onRefresh={refresh} />}
-            {tab === 'broadcast' && <Broadcast donors={donors} />}
+            {tab === 'plans' && <Plans plans={plans} donations={donations} onRefresh={refresh} />}
+            {tab === 'broadcast' && <BroadcastPanel donors={donors} />}
             {tab === 'settings' && <Settings />}
             {tab === 'reports' && <Reports />}
           </>
@@ -161,17 +172,18 @@ export default function AdminDashboard() {
 
 function Overview({ raised, goal, pct, donorCount, pendingCount, planCount, recent }: any) {
   const stats = [
-    { label: 'Insamlat totalt', value: fmtSEK(raised), color: 'text-mosque-emerald' },
-    { label: 'Registrerade givare', value: String(donorCount), color: 'text-mosque-ink' },
-    { label: 'Väntande godkännanden', value: String(pendingCount), color: 'text-amber-600' },
-    { label: 'Aktiva betalningsplaner', value: String(planCount), color: 'text-mosque-ink' }
+    { label: 'Insamlat totalt', value: fmtSEK(raised), color: 'text-mosque-emerald', icon: 'donations' },
+    { label: 'Registrerade givare', value: String(donorCount), color: 'text-mosque-ink', icon: 'donors' },
+    { label: 'Väntande godkännanden', value: String(pendingCount), color: 'text-amber-600', icon: 'pending' },
+    { label: 'Aktiva betalningsplaner', value: String(planCount), color: 'text-mosque-ink', icon: 'plans' }
   ];
   return (
     <div>
       <h1 className="mb-6 text-2xl font-extrabold text-mosque-ink">Översikt</h1>
       <div className="mb-7 grid grid-cols-2 gap-4 lg:grid-cols-4">
         {stats.map((s) => (
-          <div key={s.label} className="rounded-2xl border border-mosque-ink/10 bg-white p-5">
+          <div key={s.label} className="rounded-2xl border border-mosque-ink/10 bg-white p-5 shadow-sm">
+            <div className={`mb-4 inline-flex rounded-xl bg-mosque-cream p-2.5 ${s.color}`}><AdminIcon name={s.icon as AdminIconName} /></div>
             <div className="text-xs font-bold uppercase tracking-wide text-mosque-ink/50">{s.label}</div>
             <div className={`mt-2 text-2xl font-extrabold ${s.color}`}>{s.value}</div>
           </div>
@@ -315,7 +327,9 @@ function DonationsLog({ donations, onRefresh }: { donations: Donation[]; onRefre
   );
 }
 
-function Donors({ donors, onRefresh }: { donors: Donor[]; onRefresh: () => void }) {
+function Donors({ donors, donations, plans, onRefresh }: { donors: Donor[]; donations: Donation[]; plans: PaymentPlan[]; onRefresh: () => void }) {
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const detail = donors.find(d => d.id === detailId);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -382,20 +396,26 @@ function Donors({ donors, onRefresh }: { donors: Donor[]; onRefresh: () => void 
           </div>
         </div>
       )}
-      <div className="overflow-hidden rounded-2xl border border-mosque-ink/10 bg-white">
-        <div className="grid grid-cols-5 gap-2 bg-mosque-cream px-5 py-3 text-xs font-bold uppercase tracking-wide text-mosque-ink/50">
-          <div>Namn</div><div>Telefon</div><div>E-post</div><div>Samtycke</div><div></div>
-        </div>
-        {donors.map((d) => (
-          <div key={d.id} className="grid grid-cols-5 gap-2 border-t border-mosque-ink/5 px-5 py-3.5 text-sm items-center">
-            <div className="font-bold text-mosque-ink">{d.full_name}</div>
-            <div className="text-mosque-ink/60">{d.phone || '—'}</div>
-            <div className="text-mosque-ink/60">{d.email}</div>
-            <div className="text-mosque-ink/60">{d.gdpr_consent ? 'Givet' : '—'}</div>
-            <button onClick={() => erase(d.id)} className="justify-self-end text-xs font-bold text-red-600">Radera (GDPR)</button>
-          </div>
-        ))}
+      <div className="overflow-x-auto rounded-2xl border border-mosque-ink/10 bg-white">
+        <table className="w-full min-w-[950px] text-left text-sm">
+          <thead className="bg-mosque-cream text-xs text-mosque-ink/60"><tr>{['Givare', 'Utlovat', 'Betalt', 'Kvar', 'Delbetalningar', 'Betalningsmetod', 'Aviseringar', 'Åtgärder'].map(label => <th key={label} className="px-4 py-3">{label}</th>)}</tr></thead>
+          <tbody>{donors.map(d => {
+            const summary = donorSummary(d.id, donations, plans);
+            return <tr key={d.id} className="border-t border-mosque-ink/10">
+              <td className="px-4 py-3"><button onClick={() => setDetailId(d.id)} className="font-bold text-mosque-emerald underline">{d.full_name}</button><p className="text-xs text-mosque-ink/60">{d.email}</p></td>
+              <td className="px-4 py-3">{fmtSEK(summary.pledged)}</td>
+              <td className="px-4 py-3 font-bold text-mosque-emerald">{fmtSEK(summary.paid)}</td>
+              <td className="px-4 py-3">{fmtSEK(summary.remaining)}</td>
+              <td className="px-4 py-3">{summary.plans.length ? summary.plans.map(p => <span key={p.id} title="Betalda månadsbelopp | totalt antal månader" className="mr-2 inline-block rounded-lg bg-mosque-cream px-2.5 py-1 font-semibold tabular-nums">{planProgress(p, donations)}</span>) : '—'}</td>
+              <td className="px-4 py-3">{summary.methods}</td>
+              <td className="px-4 py-3">{notificationChoices(d)}</td>
+              <td className="space-y-2 px-4 py-3"><button onClick={() => setDetailId(d.id)} className="block text-mosque-emerald">Visa detaljer</button><button onClick={() => erase(d.id)} className="block text-xs text-red-600">Radera (GDPR)</button></td>
+            </tr>;
+          })}</tbody>
+        </table>
+        {!donors.length && <p className="p-5 text-sm">Inga givare registrerade.</p>}
       </div>
+      {detail && <DonorDetails key={detail.id} donor={detail} donations={donations} plans={plans} onClose={() => setDetailId(null)} />}
     </div>
   );
 }
@@ -424,7 +444,7 @@ function Pending({ pending, onDecide }: { pending: Donation[]; onDecide: (id: st
   );
 }
 
-function Plans({ plans, onRefresh }: { plans: PaymentPlan[]; onRefresh: () => void }) {
+function Plans({ plans, donations, onRefresh }: { plans: PaymentPlan[]; donations: Donation[]; onRefresh: () => void }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [total, setTotal] = useState('');
@@ -474,7 +494,7 @@ function Plans({ plans, onRefresh }: { plans: PaymentPlan[]; onRefresh: () => vo
             <div className="font-extrabold text-mosque-emerald">{fmtSEK(p.total_amount_sek)}</div>
             <div className="text-mosque-ink/60">{p.months} månader</div>
             <div className="text-mosque-ink/60">{fmtSEK(p.amount_per_month_sek)}</div>
-            <div className="text-mosque-ink/50">{p.installments_paid}/{p.months} betalda</div>
+            <div className="text-mosque-ink/50">{planProgress(p, donations)} månadsbelopp betalda</div>
             <div className="flex justify-end gap-3">
               <button onClick={() => startEdit(p)} className="text-xs font-bold text-mosque-ink/50">Redigera</button>
               <button onClick={() => remove(p.id)} className="text-xs font-bold text-red-600">Avbryt</button>
@@ -496,113 +516,6 @@ function Plans({ plans, onRefresh }: { plans: PaymentPlan[]; onRefresh: () => vo
             <button onClick={save} className="flex-1 rounded-lg bg-mosque-emerald px-4 py-2 text-sm font-bold text-white">{editingId ? 'Spara' : 'Skapa'}</button>
             {editingId && <button onClick={cancelEdit} className="rounded-lg bg-mosque-ink/10 px-4 py-2 text-sm font-bold text-mosque-ink">Avbryt</button>}
           </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Broadcast({ donors }: { donors: Donor[] }) {
-  const [message, setMessage] = useState('');
-  const [selected, setSelected] = useState<Set<string>>(new Set(donors.map((d) => d.id)));
-  const [log, setLog] = useState<BroadcastLogEntry[]>([]);
-  const [toast, setToast] = useState('');
-  const [sending, setSending] = useState(false);
-
-  useEffect(() => {
-    setSelected(new Set(donors.map((d) => d.id)));
-  }, [donors]);
-
-  useEffect(() => {
-    fetch('/api/admin/broadcast').then((r) => r.json()).then((j) => setLog(j.log || []));
-  }, []);
-
-  const toggle = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-
-  const selectedDonors = donors.filter((d) => selected.has(d.id));
-  const smsReach = selectedDonors.filter((d) => d.phone && d.comm_sms && !d.comm_opt_out).length;
-  const emailReach = selectedDonors.filter((d) => d.email && d.comm_email && !d.comm_opt_out).length;
-
-  const send = async (channel: 'sms' | 'email') => {
-    if (!message.trim() || sending) return;
-    setSending(true);
-    const res = await fetch('/api/admin/broadcast', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channel, message, donorIds: Array.from(selected) })
-    });
-    const json = await res.json();
-    setSending(false);
-    if (json.error) return setToast(json.error);
-    setToast(`Skickat till ${json.recipients} mottagare${json.simulated ? ' (simulerat — ingen leverantör konfigurerad)' : ''}`);
-    setMessage('');
-    fetch('/api/admin/broadcast').then((r) => r.json()).then((j) => setLog(j.log || []));
-    setTimeout(() => setToast(''), 5000);
-  };
-
-  return (
-    <div>
-      <h1 className="mb-1 text-2xl font-extrabold text-mosque-ink">Utskick</h1>
-      <div className="mb-5 text-sm text-mosque-ink/60">Skicka SMS eller e-post till valda givare</div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[2fr_1fr] items-start">
-        <div className="rounded-2xl border border-mosque-ink/10 bg-white p-5">
-          <div className="mb-2 text-xs font-bold text-mosque-ink/50">Meddelande</div>
-          <textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="t.ex. JazakAllah Khair — vi har nått 45% av vårt mål!"
-            className="min-h-[120px] w-full rounded-lg border border-mosque-ink/15 p-3 text-sm"
-          />
-          {toast && <div className="mt-3 rounded-lg bg-mosque-emerald/10 p-3 text-sm font-bold text-mosque-emerald">{toast}</div>}
-          <div className="mt-4 flex gap-2">
-            <button disabled={!message.trim() || sending} onClick={() => send('sms')} className="whitespace-nowrap rounded-lg bg-mosque-emerald px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">
-              Skicka SMS ({smsReach})
-            </button>
-            <button disabled={!message.trim() || sending} onClick={() => send('email')} className="whitespace-nowrap rounded-lg bg-mosque-emerald px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">
-              Skicka e-post ({emailReach})
-            </button>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-mosque-ink/10 bg-white p-5">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-xs font-bold uppercase text-mosque-ink/50">Mottagare</div>
-            <button onClick={() => setSelected(selected.size === donors.length ? new Set() : new Set(donors.map((d) => d.id)))} className="text-xs font-bold text-mosque-emerald">
-              {selected.size === donors.length ? 'Avmarkera alla' : 'Markera alla'}
-            </button>
-          </div>
-          <div className="max-h-56 overflow-y-auto rounded-lg border border-mosque-ink/10">
-            {donors.map((d) => (
-              <label key={d.id} className="flex items-center gap-2 border-b border-mosque-ink/5 px-3 py-2 last:border-0">
-                <input type="checkbox" checked={selected.has(d.id)} onChange={() => toggle(d.id)} />
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold">{d.full_name}</span>
-              </label>
-            ))}
-          </div>
-          <div className="mt-3 flex justify-between text-sm font-bold"><span>Valda</span><span className="text-mosque-emerald">{selected.size}</span></div>
-        </div>
-      </div>
-
-      <div className="mt-6">
-        <div className="mb-3 text-sm font-extrabold text-mosque-ink">Skickhistorik</div>
-        <div className="overflow-hidden rounded-2xl border border-mosque-ink/10 bg-white">
-          {log.length === 0 && <div className="p-8 text-center text-sm text-mosque-ink/40">Inget skickat än</div>}
-          {log.map((l) => (
-            <div key={l.id} className="flex items-center justify-between gap-3 border-b border-mosque-ink/5 px-5 py-3.5 last:border-0">
-              <div className="min-w-0">
-                <div className="text-sm font-bold text-mosque-ink">{l.channel.toUpperCase()} · {l.recipient_count} mottagare{l.simulated ? ' · simulerat' : ''}</div>
-                <div className="truncate text-xs text-mosque-ink/50">{l.message}</div>
-              </div>
-              <div className="flex-shrink-0 text-xs text-mosque-ink/40">{new Date(l.created_at).toLocaleString('sv-SE')}</div>
-            </div>
-          ))}
         </div>
       </div>
     </div>

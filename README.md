@@ -10,10 +10,18 @@ visual/interaction reference; this folder is the implementation.
   admin dashboard (`/admin`).
 - **Tailwind CSS** — all styling, using the `mosque-*` color tokens defined in
   `tailwind.config.ts` (emerald/gold palette matching the design).
-- **Supabase** — Postgres database, Row Level Security, Realtime (live feed),
+- **Supabase** — Postgres database, Row Level Security, a restricted public feed,
   and Auth (admin login). See `supabase/*.sql`.
 
 ## Setup
+
+The supplied project URL and publishable key are configured in the ignored
+`.env.local` file. The URL was corrected from `.supabase.coo` to `.supabase.co`.
+To finish the initial database setup, run `supabase/setup.sql` once in your
+Supabase project's SQL Editor (it combines the three scripts below). Then add
+your server-only secret key to `SUPABASE_SECRET_KEY` in `.env.local` and create
+the admin user described below. The publishable key cannot create tables or
+perform the privileged operations used by the registration and admin routes.
 
 1. `npm install`
 2. Create a Supabase project. In the SQL editor, run in order:
@@ -52,10 +60,9 @@ visual/interaction reference; this folder is the implementation.
 
 - The public tracker (`app/page.tsx`) reads `campaign_totals` and recent
   confirmed `donations` server-side on load, then `components/LiveFeed.tsx`
-  subscribes to Supabase Realtime so new confirmed donations (e.g. an admin
-  approving a Swish payment) appear instantly without a refresh.
+  polls the restricted public_donations view every 15 seconds.
 - `components/RegisterForm.tsx` posts to `app/api/register/route.ts`, which
-  upserts the donor, logs consent, and creates either a pending donation or a
+  atomically creates a donor, records separate consents, and creates a pending donation or a
   payment plan depending on the chosen frequency.
 - The admin dashboard (`app/admin/page.tsx`) is a client component that calls
   `/api/admin/*` routes, all gated by `lib/auth.ts`'s `requireAdmin`, which
@@ -108,7 +115,7 @@ UI needs to change.
 - **Purpose limitation**: communication preference (email / SMS / WhatsApp /
   none) is captured and stored per-donor; respect `comm_opt_out` before any
   outreach.
-- **Data minimisation**: the live tracker and its Realtime feed only ever
+- **Data minimisation**: the live tracker and its restricted public feed only ever
   read `donations` (display name + amount + message), never the `donors`
   table — personal data (email, phone) is never sent to the browser.
 - **Right of access / erasure**: the admin Donors tab has an "Erase (GDPR)"

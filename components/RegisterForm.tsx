@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Lang, CommPref, TransparencyFile } from '@/lib/types';
 import { t } from '@/lib/i18n';
+import { formText, validateRegistration } from '@/lib/registration';
 
 // Registration + GDPR consent capture. Submits to /api/register, which
 // writes the donor, the pending donation/plan, and an immutable consent_log
@@ -15,12 +16,18 @@ export default function RegisterForm({ lang, transparencyFiles }: { lang: Lang; 
   const [frequency, setFrequency] = useState<'onetime' | 'monthly'>('onetime');
   const [months, setMonths] = useState<2 | 6 | 12>(6);
   const [comms, setComms] = useState<Record<CommPref, boolean>>({
-    email: true,
+    email: false,
     sms: false,
     whatsapp: false,
-    none: false
+    none: true
   });
   const [consent, setConsent] = useState(false);
+  const [publicDisplayConsent, setPublicDisplayConsent] = useState(false);
+  const [displayMode, setDisplayMode] = useState<'anonymous' | 'entered' | 'custom'>('anonymous');
+  const [displayName, setDisplayName] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<'swish' | 'bank_transfer'>('swish');
+  const [reference, setReference] = useState('');
+  const text = formText[lang];
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -35,29 +42,29 @@ export default function RegisterForm({ lang, transparencyFiles }: { lang: Lang; 
 
   const disabled = !name || !email || !amount || !consent || loading;
 
-  const submit = async () => {
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (loading) return;
     setError(null);
+    const payload = {
+      fullName: name, email, phone, amountSek: Number(amount), preferredLanguage: lang,
+      frequency, months: frequency === 'monthly' ? months : null, comms,
+      gdprConsent: consent, publicDisplayConsent, paymentMethod, displayMode, displayName
+    };
+    if (!validateRegistration(payload)) { setError(text.invalid); return; }
     setLoading(true);
     try {
       const res = await fetch('/api/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fullName: name,
-          email,
-          phone,
-          amountSek: Number(amount),
-          preferredLanguage: lang,
-          frequency,
-          months: frequency === 'monthly' ? months : null,
-          comms,
-          gdprConsent: consent
-        })
+        body: JSON.stringify(payload)
       });
-      if (!res.ok) throw new Error('Registration failed');
+      const result = await res.json();
+      if (!res.ok) { setError(text[result.error] || text.failed); return; }
+      setReference(result.reference);
       setSubmitted(true);
     } catch (e) {
-      setError('Something went wrong. Please try again.');
+      setError(text.failed);
     } finally {
       setLoading(false);
     }
@@ -69,8 +76,10 @@ export default function RegisterForm({ lang, transparencyFiles }: { lang: Lang; 
         <div className="mb-2 text-3xl">✅</div>
         <div className="mb-1.5 text-lg font-extrabold text-mosque-cream">{t(lang, 'thankYou')}</div>
         <div className="mx-auto max-w-md text-[13px] leading-relaxed text-mosque-mint/70">
-          Er donation är registrerad som väntande och bekräftas av administratören inom kort. Ni får en bekräftelse via {comms.email ? 'e-post' : comms.sms ? 'sms' : 'era valda kanaler'} när den är klar.
+          {text.pending}
         </div>
+        <div className="mt-4 text-sm text-mosque-mint/70">{text.reference}</div>
+        <div className="mt-2 break-all font-mono font-bold text-mosque-gold" dir="ltr">{reference}</div>
 
         {transparencyFiles.length > 0 && (
           <div className="mx-auto mt-6 max-w-md rounded-2xl border border-white/10 bg-white/5 p-5 text-left">
@@ -98,22 +107,30 @@ export default function RegisterForm({ lang, transparencyFiles }: { lang: Lang; 
   }
 
   return (
-    <div className="mt-6 rounded-[20px] border border-white/10 bg-white/5 p-7 backdrop-blur">
+    <form onSubmit={submit} className="mt-6 rounded-[20px] border border-white/10 bg-white/5 p-7 backdrop-blur">
       <div className="mb-1 text-lg font-extrabold">{t(lang, 'registerTitle')}</div>
       <div className="mb-5 text-[13px] text-mosque-mint/70">{t(lang, 'registerSubtitle')}</div>
 
       <div className="mb-4 grid grid-cols-1 gap-3.5 sm:grid-cols-2">
         <Field label={t(lang, 'fullName')} value={name} onChange={setName} placeholder="e.g. Ali Hassan" />
-        <Field label={t(lang, 'email')} value={email} onChange={setEmail} placeholder="name@email.com" />
-        <Field label={t(lang, 'phone')} value={phone} onChange={setPhone} placeholder="+46 70 000 00 00" />
-        <Field label={t(lang, 'amount')} value={amount} onChange={setAmount} placeholder="1000" />
+        <Field type="email" label={t(lang, 'email')} value={email} onChange={setEmail} placeholder="name@email.com" />
+        <Field type="tel" required={comms.sms || comms.whatsapp} label={t(lang, 'phone')} value={phone} onChange={setPhone} placeholder="+46 70 000 00 00" />
+        <Field type="number" label={t(lang, 'amount')} value={amount} onChange={setAmount} placeholder="1000" />
       </div>
+      <label className="mb-4 block text-sm">
+        {text.paymentMethod}
+        <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as 'swish' | 'bank_transfer')} className="mt-2 block w-full rounded-lg bg-mosque-deep p-3">
+          <option value="swish">Swish</option>
+          <option value="bank_transfer">{text.bankTransfer}</option>
+        </select>
+      </label>
 
       <div className="mb-4">
         <div className="mb-2 text-xs font-bold text-mosque-mint/70">{t(lang, 'plan')}</div>
         <div className="flex flex-wrap gap-2">
           {(['onetime', 'monthly'] as const).map((f) => (
             <button
+              type="button"
               key={f}
               onClick={() => setFrequency(f)}
               className={`rounded-lg border border-white/15 px-4 py-2 text-sm font-bold ${
@@ -128,6 +145,7 @@ export default function RegisterForm({ lang, transparencyFiles }: { lang: Lang; 
           <div className="mt-2.5 flex flex-wrap gap-2">
             {([2, 6, 12] as const).map((m) => (
               <button
+                type="button"
                 key={m}
                 onClick={() => setMonths(m)}
                 className={`rounded-lg border border-white/15 px-3.5 py-2 text-sm font-semibold ${
@@ -139,9 +157,11 @@ export default function RegisterForm({ lang, transparencyFiles }: { lang: Lang; 
             ))}
           </div>
         )}
+        {frequency === 'monthly' && <p className="mt-2 text-xs text-mosque-mint/70">{text.planTotal}</p>}
       </div>
 
       <div className="mb-4.5 mb-4">
+        <p className="mb-2 text-xs text-mosque-mint/70">{text.notificationConsent}</p>
         <div className="mb-2 text-xs font-bold text-mosque-mint/70">{t(lang, 'communication')}</div>
         <div className="flex flex-wrap gap-2">
           {(
@@ -153,6 +173,8 @@ export default function RegisterForm({ lang, transparencyFiles }: { lang: Lang; 
             ] as [CommPref, string][]
           ).map(([key, icon]) => (
             <button
+              type="button"
+              aria-pressed={comms[key]}
               key={key}
               onClick={() => toggleComm(key)}
               className={`flex items-center gap-1.5 rounded-lg border border-white/15 px-3.5 py-2 text-sm font-semibold ${
@@ -160,7 +182,7 @@ export default function RegisterForm({ lang, transparencyFiles }: { lang: Lang; 
               }`}
             >
               <span>{icon}</span>
-              {key}
+              {key === 'none' ? text.none : key}
             </button>
           ))}
         </div>
@@ -180,17 +202,36 @@ export default function RegisterForm({ lang, transparencyFiles }: { lang: Lang; 
           </a>
         </span>
       </label>
+      <fieldset className="mb-4 rounded-lg bg-white/[0.04] p-3.5">
+        <legend className="text-sm font-bold">{text.displayChoice}</legend>
+        <p className="mb-3 text-xs text-mosque-mint/80">{text.displayHelp}</p>
+        {(['anonymous', 'entered', 'custom'] as const).map(mode => (
+          <label key={mode} className="mb-2 flex items-center gap-2 text-sm">
+            <input type="radio" name="displayMode" value={mode} checked={displayMode === mode} onChange={() => { setDisplayMode(mode); setPublicDisplayConsent(false); }} />
+            {mode === 'anonymous' ? text.anonymous : mode === 'entered' ? text.enteredName : text.customName}
+          </label>
+        ))}
+        {displayMode === 'custom' && <label className="mt-3 block text-sm">
+          {text.displayName}
+          <input required maxLength={80} value={displayName} onChange={e => setDisplayName(e.target.value)} className="mt-2 block w-full rounded-lg border border-white/15 bg-white/[0.06] p-3" />
+        </label>}
+        {displayMode !== 'anonymous' && <p className="mt-3 break-words text-sm text-mosque-gold">{text.displayName}: {displayMode === 'entered' ? name : displayName}</p>}
+      </fieldset>
+      {displayMode !== 'anonymous' && <label className="mb-4 flex items-start gap-2.5 rounded-lg bg-white/[0.04] p-3.5 text-xs text-mosque-mint/80">
+        <input type="checkbox" checked={publicDisplayConsent} onChange={e => setPublicDisplayConsent(e.target.checked)} />
+        <span>{text.displayConsent}</span>
+      </label>}
 
-      {error && <div className="mb-3 text-sm font-semibold text-red-300">{error}</div>}
+      {error && <div role="alert" className="mb-3 text-sm font-semibold text-red-300">{error}</div>}
 
       <button
-        onClick={submit}
+        type="submit"
         disabled={disabled}
         className="w-full rounded-xl bg-mosque-gold py-3.5 font-extrabold text-mosque-deep disabled:opacity-40"
       >
         {loading ? '…' : t(lang, 'submit')}
       </button>
-    </div>
+    </form>
   );
 }
 
@@ -198,22 +239,32 @@ function Field({
   label,
   value,
   onChange,
-  placeholder
+  placeholder,
+  type = 'text',
+  required = true
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder: string;
+  type?: 'text' | 'email' | 'tel' | 'number';
+  required?: boolean;
 }) {
   return (
-    <div>
+    <label>
       <div className="mb-1.5 text-xs font-bold text-mosque-mint/70">{label}</div>
       <input
+        type={type}
+        required={required}
+        min={type === 'number' ? 1 : undefined}
+        max={type === 'number' ? 10000000 : undefined}
+        step={type === 'number' ? 1 : undefined}
+        maxLength={type === 'text' ? 120 : type === 'email' ? 254 : type === 'tel' ? 30 : undefined}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         className="w-full rounded-lg border border-white/15 bg-white/[0.06] px-3.5 py-2.5 text-sm text-mosque-cream placeholder:text-mosque-cream/30"
       />
-    </div>
+    </label>
   );
 }

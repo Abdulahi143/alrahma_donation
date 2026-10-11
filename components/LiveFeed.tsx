@@ -2,30 +2,26 @@
 
 import { useEffect, useState } from 'react';
 import { supabaseBrowser } from '@/lib/supabase/client';
-import { Donation, Lang } from '@/lib/types';
+import { PublicDonation, Lang } from '@/lib/types';
 import { fmtSEK, timeAgo } from '@/lib/format';
 import { t } from '@/lib/i18n';
 
-// Subscribes to Supabase Realtime for newly confirmed donations so the
-// tracker updates the instant an admin approves a payment.
-export default function LiveFeed({ lang, initial }: { lang: Lang; initial: Donation[] }) {
-  const [donations, setDonations] = useState<Donation[]>(initial);
+// Refresh only safe display fields; private donation rows are never broadcast.
+export default function LiveFeed({ lang, initial }: { lang: Lang; initial: PublicDonation[] }) {
+  const [donations, setDonations] = useState<PublicDonation[]>(initial);
 
   useEffect(() => {
-    const channel = supabaseBrowser
-      .channel('public:donations')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'donations', filter: 'status=eq.confirmed' },
-        (payload) => {
-          const row = payload.new as Donation;
-          setDonations((prev) => [row, ...prev].slice(0, 30));
-        }
-      )
-      .subscribe();
+    let active = true;
+    const refresh = async () => {
+      const { data, error } = await supabaseBrowser.from('public_donations')
+        .select('*').order('created_at', { ascending: false }).limit(30);
+      if (active && !error && data) setDonations(data);
+    };
+    const timer = setInterval(refresh, 15000);
 
     return () => {
-      supabaseBrowser.removeChannel(channel);
+      active = false;
+      clearInterval(timer);
     };
   }, []);
 

@@ -1,20 +1,33 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { createMiddlewareClient } from '@supabase/auth-helpers-nextjs';
+import { createServerClient } from '@supabase/ssr';
 
 // Protects /admin/** pages: redirects to /admin/login if there's no
 // Supabase Auth session. API routes are protected separately in lib/auth.ts.
 export async function middleware(req: NextRequest) {
-  const res = NextResponse.next();
-  const supabase = createMiddlewareClient({ req, res });
+  let res = NextResponse.next({ request: req });
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    { cookies: {
+      getAll: () => req.cookies.getAll(),
+      setAll: (values) => {
+        values.forEach(({ name, value }) => req.cookies.set(name, value));
+        res = NextResponse.next({ request: req });
+        values.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
+      }
+    } }
+  );
   const {
-    data: { session }
-  } = await supabase.auth.getSession();
+    data: { user }
+  } = await supabase.auth.getUser();
 
-  if (!session && !req.nextUrl.pathname.startsWith('/admin/login')) {
+  if (!user && !req.nextUrl.pathname.startsWith('/admin/login')) {
     const url = req.nextUrl.clone();
     url.pathname = '/admin/login';
-    return NextResponse.redirect(url);
+    const redirect = NextResponse.redirect(url);
+    res.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+    return redirect;
   }
 
   return res;

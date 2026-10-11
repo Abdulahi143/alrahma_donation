@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Donation, Lang, TransparencyFile } from '@/lib/types';
+import { PublicDonation, Lang, TransparencyFile } from '@/lib/types';
 import { t } from '@/lib/i18n';
 import LanguageDropdown from '@/components/LanguageDropdown';
 import ProgressCard from '@/components/ProgressCard';
@@ -21,7 +21,7 @@ export default function TrackerClient({
 }: {
   goal: number;
   raised: number;
-  initialDonations: Donation[];
+  initialDonations: PublicDonation[];
   subtitle?: string | null;
   isLive: boolean;
   pausedMessage?: string | null;

@@ -1,0 +1,50 @@
+# Supabase migrations
+
+For a new, empty project, run `setup.sql` in the Supabase SQL Editor. It applies both migrations in a transaction. Run it once.
+
+For a project that already has the original schema, RLS policies and admins table, run only `migrations/202610100002_registration.sql` inside a transaction. Do not rerun the initial migration.
+
+The application also needs `SUPABASE_SECRET_KEY` in the ignored `.env.local`. The public key cannot apply SQL or call the registration function. Never put the secret in a NEXT_PUBLIC variable.
+
+Registration now calls `register_donation(payload)` from the server. The function stores donor details, consent evidence and the pending pledge together. It generates a unique AR reference. Monthly amounts are total pledges and must divide evenly over 2, 6 or 12 months. Payment verification remains manual.
+
+Each submission has a separate donor record. Email is no longer unique: an unauthenticated caller must not overwrite an existing donor's details or preferences. CSV donor imports now insert records rather than update records by email.
+
+Public name display is opt-in. Anonymous registrations store Anonymous in the pledge display name. Contact details and references stay private. Public clients read the public_donations view; the donations table is removed from Realtime publication because whole-row events include private columns.
+
+Validation before deployment:
+- Submit one-time Swish and bank-transfer pledges and a divisible monthly pledge.
+- Confirm each reference is unique, pending pledges do not increase totals, and each submission has three consent log entries.
+- Reject fractional amounts and SMS/WhatsApp preferences without a phone.
+- With the publishable key, confirm donors and consent logs cannot be read and the registration RPC cannot be called.
+- Confirm a donation manually; verify only display fields appear in public_donations.
+- Edit, reject and delete confirmed donations; verify campaign_totals stays correct.
+
+The initial schema, registration function and display-name update were applied to the hosted project on 2026-10-11 through the Supabase SQL Editor. Verified: 8 tables have RLS, only service_role can execute registration, and public clients cannot read donation references or donor IDs. The organisation's privacy policy, retention period and contact information still need to be supplied before collecting real donor data.
+
+Display-name update: existing installations must also run migrations/202610100003_display_name.sql. Fresh setup.sql includes it. Anonymous remains the default; entered names and custom names require explicit public-display consent.
+
+
+## WhatsApp notification preparation
+
+Applied migration `202610110001_notifications.sql`: notification_templates, notification_queue and notification_logs are server-only with RLS. Nine draft templates cover pledge acknowledgement, verified payment confirmation and one reminder in English, Swedish and Arabic.
+
+New eligible pledges and verified payments create queue entries transactionally. WhatsApp opt-in, a phone number, no opt-out and no donor deletion are required. Opt-out cancels queued entries. Repeated confirmation does not duplicate the queue. Existing pledges are not backfilled automatically.
+
+Admin > WhatsApp-aviseringar shows previews and logs. Queue reminders is an explicit admin action for pending one-time pledges older than 7 days; at most one reminder is created per pledge. Monthly installment reminders require due dates and are deferred.
+
+Sending is disabled in code. Nothing claims successful delivery. Meta-approved templates, a sending worker with a fresh consent/status check, provider credentials and verified delivery webhooks are the next integration step. Draft messages need the organisation's review and an opt-out/contact mechanism before submission to Meta.
+
+Tests: `supabase/tests/notifications.sql` runs fixture assertions in a rolled-back transaction, without sending messages or retaining test donor data.
+
+## Utskick: SMS, email and WhatsApp
+
+Utskick now uses a separate BroadcastPanel, provider adapters in lib/broadcast.ts and shared contact eligibility in lib/communication.ts. Missing provider credentials block sending; there are no simulated successes. Provider acceptance is recorded separately from delivery, which requires future delivery callbacks.
+
+Configure Twilio for SMS and Resend with a verified sender for email using the variables in .env.example. WhatsApp stays disabled unless WHATSAPP_ENABLED=true and its credentials and Graph API version are configured after Meta access is restored.
+
+For WhatsApp broadcasts, import an approved, static Meta template into notification_templates with its exact body, language, provider_name and provider_language; set approval_status=approved only after Meta approval. Variable-based donation templates are handled by the existing pledge queue, not Utskick. The selected template language must match the donor's language. SMS and email use the message composer.
+
+Only opted-in, non-deleted donors are eligible. Phone numbers must include an international country code (for example +46); formatting is normalized. Duplicate contact addresses receive one message per batch. Select at most 50 donors. Use donation updates, not fundraising campaigns: the current form does not collect fundraising consent.
+
+A log is created before sending. Interrupted sends can leave status=sending; inspect provider logs before retrying. No automatic retries are implemented. Test command: node tests/broadcast.cjs (mocked providers; no real messages).
