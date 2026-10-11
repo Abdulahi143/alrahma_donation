@@ -19,7 +19,7 @@ export async function PUT(req: NextRequest) {
   const guard = await requireAdmin(req);
   if (guard) return guard;
 
-  const { swishNumber, bankgiro, iban, isLive, pausedMessage, transparencyFiles } = await req.json();
+  const { swishNumber, bankgiro, iban, paypalLink, isLive, pausedMessage, transparencyFiles } = await req.json();
   const supabase = supabaseAdmin();
   const { data, error } = await supabase
     .from('campaign_settings')
@@ -27,6 +27,7 @@ export async function PUT(req: NextRequest) {
       swish_number: swishNumber,
       bankgiro,
       iban,
+      paypal_link: paypalLink ?? '',
       is_live: isLive,
       paused_message: pausedMessage,
       transparency_files: Array.isArray(transparencyFiles) ? transparencyFiles : [],

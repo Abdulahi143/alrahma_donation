@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@supabase/auth-helpers-nextjs';
+import { createServerClient } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
 // Gate every /api/admin/** route with a real Supabase Auth session, and
@@ -10,21 +10,27 @@ export async function requireAdmin(req: NextRequest): Promise<NextResponse | nul
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-    { cookies }
+    {
+      cookies: {
+        getAll: () => cookies().getAll(),
+        // Read-only here: route handlers don't need to refresh cookies.
+        setAll: () => {}
+      }
+    }
   );
 
   const {
-    data: { session }
-  } = await supabase.auth.getSession();
+    data: { user }
+  } = await supabase.auth.getUser();
 
-  if (!session) {
+  if (!user) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
   }
 
   const { data: admin } = await supabase
     .from('admins')
     .select('user_id')
-    .eq('user_id', session.user.id)
+    .eq('user_id', user.id)
     .maybeSingle();
 
   if (!admin) {

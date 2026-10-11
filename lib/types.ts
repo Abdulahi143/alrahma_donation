@@ -52,6 +52,7 @@ export interface CampaignSettings {
   swish_number: string;
   bankgiro: string;
   iban: string;
+  paypal_link: string;
   is_live: boolean;
   paused_message: string;
   transparency_files: TransparencyFile[];
