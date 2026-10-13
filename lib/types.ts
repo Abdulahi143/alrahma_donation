@@ -12,6 +12,7 @@ export interface Donor {
   comm_sms: boolean;
   comm_whatsapp: boolean;
   comm_opt_out: boolean;
+  reminders_paused?: boolean;
   gdpr_consent: boolean;
   gdpr_consent_at: string | null;
   created_at: string;
@@ -29,6 +30,7 @@ export interface Donation {
   payment_plan_id: string | null;
   reference?: string;
   confirmed_at?: string | null;
+  paid_on?: string | null;
   created_at: string;
 }
 
@@ -42,6 +44,7 @@ export interface PaymentPlan {
   months: 2 | 6 | 12;
   amount_per_month_sek: number;
   installments_paid: number;
+  first_due_on?: string | null;
   method?: 'swish' | 'bank_transfer';
   reference?: string;
   is_anonymous?: boolean;

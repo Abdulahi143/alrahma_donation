@@ -73,8 +73,8 @@ export default function AdminDashboard() {
   const [plans, setPlans] = useState<PaymentPlan[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const refresh = async () => {
-    setLoading(true);
+  const refresh = async (silent = false) => {
+    if (!silent) setLoading(true);
     const [dRes, doRes, pRes] = await Promise.all([
       fetch('/api/admin/donations'),
       fetch('/api/admin/donors'),
@@ -157,7 +157,7 @@ export default function AdminDashboard() {
               <Overview raised={raised} goal={goal} pct={pct} donorCount={donors.length} pendingCount={pending.length} planCount={plans.length} recent={confirmed.slice(0, 5)} />
             )}
             {tab === 'donations' && <DonationsLog donations={donations} onRefresh={refresh} />}
-            {tab === 'donors' && <Donors donors={donors} donations={donations} plans={plans} onRefresh={refresh} />}
+            {tab === 'donors' && <Donors donors={donors} donations={donations} plans={plans} onRefresh={() => refresh(true)} />}
             {tab === 'pending' && <Pending pending={pending} onDecide={approve} />}
             {tab === 'plans' && <Plans plans={plans} donations={donations} onRefresh={refresh} />}
             {tab === 'broadcast' && <BroadcastPanel donors={donors} />}
@@ -415,7 +415,7 @@ function Donors({ donors, donations, plans, onRefresh }: { donors: Donor[]; dona
         </table>
         {!donors.length && <p className="p-5 text-sm">Inga givare registrerade.</p>}
       </div>
-      {detail && <DonorDetails key={detail.id} donor={detail} donations={donations} plans={plans} onClose={() => setDetailId(null)} />}
+      {detail && <DonorDetails key={detail.id} donor={detail} donations={donations} plans={plans} onUpdated={onRefresh} onClose={() => setDetailId(null)} />}
     </div>
   );
 }
@@ -449,8 +449,11 @@ function Plans({ plans, donations, onRefresh }: { plans: PaymentPlan[]; donation
   const [name, setName] = useState('');
   const [total, setTotal] = useState('');
   const [months, setMonths] = useState('6');
+  const [planError, setPlanError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const startEdit = (p: PaymentPlan) => {
+    setPlanError('');
     setEditingId(p.id);
     setName(p.display_name);
     setTotal(String(p.total_amount_sek));
@@ -465,14 +468,16 @@ function Plans({ plans, donations, onRefresh }: { plans: PaymentPlan[]; donation
   };
 
   const save = async () => {
+    if (saving) return;
+    setSaving(true); setPlanError('');
     const body = JSON.stringify({ displayName: name, totalAmountSek: Number(total), months: Number(months) });
-    if (editingId) {
-      await fetch(`/api/admin/plans/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body });
-    } else {
-      await fetch('/api/admin/plans', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
-    }
-    cancelEdit();
-    onRefresh();
+    try {
+      const res = await fetch(editingId ? `/api/admin/plans/${editingId}` : '/api/admin/plans', { method: editingId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body });
+      const result = await res.json();
+      if (!res.ok) { setPlanError(result.error || 'Planen kunde inte sparas.'); return; }
+      cancelEdit(); onRefresh();
+    } catch { setPlanError('Kunde inte ansluta. Försök igen.'); }
+    finally { setSaving(false); }
   };
 
   const remove = async (id: string) => {
@@ -513,10 +518,11 @@ function Plans({ plans, donations, onRefresh }: { plans: PaymentPlan[]; donation
             <option value="12">12 månader</option>
           </select>
           <div className="flex gap-2">
-            <button onClick={save} className="flex-1 rounded-lg bg-mosque-emerald px-4 py-2 text-sm font-bold text-white">{editingId ? 'Spara' : 'Skapa'}</button>
+            <button disabled={saving} onClick={save} className="flex-1 rounded-lg bg-mosque-emerald px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{saving ? 'Sparar…' : editingId ? 'Spara' : 'Skapa'}</button>
             {editingId && <button onClick={cancelEdit} className="rounded-lg bg-mosque-ink/10 px-4 py-2 text-sm font-bold text-mosque-ink">Avbryt</button>}
           </div>
         </div>
+        {planError && <p role="alert" className="text-sm text-red-700">{planError}</p>}
       </div>
     </div>
   );

@@ -14,6 +14,8 @@ export async function GET(req: NextRequest) {
   try {
     const { error } = await supabaseAdmin().rpc('queue_pledge_reminders');
     if (error) throw new Error('Cannot prepare reminders');
+    const { error: monthlyError } = await supabaseAdmin().rpc('queue_monthly_reminders');
+    if (monthlyError) throw new Error('Cannot prepare monthly reminders');
     return NextResponse.json(await processNotifications());
   } catch { return NextResponse.json({ error: 'Notification processing failed. Inspect pending messages before retrying.' }, { status: 503 }); }
 }

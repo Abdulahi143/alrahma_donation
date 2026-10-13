@@ -5,12 +5,13 @@ import { useEffect, useState } from 'react';
 type Template = { id: string; language: string; body: string; approval_status: string };
 type Entry = {
   id: string; template_id: string; language: string; status: string; delivery_status?: string;
+  installment_number?: number; amount_due?: number;
   donors: { full_name: string } | null;
   donations: { amount_sek: number; reference: string } | null;
   payment_plans: { total_amount_sek: number; reference: string } | null;
 };
-type Data = { queue: Entry[]; templates: Template[]; sendingEnabled: boolean; webhookConfigured: boolean; deliveryReady: boolean; deliveries: { status: string; occurred_at: string; error_code: number | null }[] };
-const labels: Record<string, string> = { queued: 'Väntar på utskick', sending: 'Behandlas – kontrollera resultat innan nytt försök', cancelled: 'Avbruten', sent: 'Accepterat av WhatsApp', delivered: 'Levererat', read: 'Läst', failed: 'Misslyckat', draft: 'Väntar på godkännande', approved: 'Godkänd', rejected: 'Avvisad', payment_confirmed: 'Tack för betalningen', pledge_reminder: 'Betalningspåminnelse' };
+type Data = { queue: Entry[]; templates: Template[]; sendingEnabled: boolean; paused: boolean; controlsReady: boolean; webhookConfigured: boolean; deliveryReady: boolean; deliveries: { status: string; occurred_at: string; error_code: number | null }[] };
+const labels: Record<string, string> = { queued: 'Väntar på utskick', sending: 'Behandlas – kontrollera resultat innan nytt försök', cancelled: 'Avbruten', sent: 'Accepterat av WhatsApp', delivered: 'Levererat', read: 'Läst', failed: 'Misslyckat', draft: 'Väntar på godkännande', approved: 'Godkänd', rejected: 'Avvisad', payment_confirmed: 'Tack för betalningen', pledge_reminder: 'Betalningspåminnelse', plan_reminder: 'Påminnelse om delbetalning' };
 
 export default function NotificationPanel() {
   const [data, setData] = useState<Data | null>(null);
@@ -48,13 +49,26 @@ export default function NotificationPanel() {
     } catch { setError('Utskicket kunde inte slutföras. Kontrollera meddelandenas status innan du försöker igen.'); }
     finally { setBusy(false); }
   }
+  async function pause() {
+    if (!data) return;
+    setBusy(true); setError('');
+    try {
+      const res = await fetch('/api/admin/notifications/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ paused: !data.paused }) });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error);
+      setNotice(data.paused ? 'Automatiska meddelanden har återupptagits.' : 'Automatiska meddelanden är pausade.'); await load();
+    } catch { setError('Kunde inte ändra pausen. Försök igen.'); }
+    finally { setBusy(false); }
+  }
 
   return <section className="space-y-5">
     <h1 className="text-2xl font-bold">WhatsApp-aviseringar</h1>
+    {data?.controlsReady && <div className="flex flex-wrap items-center gap-3 rounded-xl border bg-white p-4"><span className="text-sm font-semibold">{data.paused ? 'Automatiska tack och påminnelser är pausade.' : 'Automatiska tack och påminnelser är inte pausade.'}</span><button disabled={busy} onClick={pause} className="rounded-lg border px-3 py-2 text-sm">{data.paused ? 'Återuppta automatiska meddelanden' : 'Pausa automatiska meddelanden'}</button></div>}
+    {data && !data.controlsReady && <p className="text-sm text-amber-800">De nya betalnings- och aviseringsfunktionerna aktiveras när driftansvarig har installerat databasuppdateringen.</p>}
     <p className="rounded-xl bg-mosque-cream p-4 text-sm">{data?.sendingEnabled ? 'WhatsApp-utskick är aktiverade. Endast godkända meddelanden skickas. Automatiska utskick kräver att driftansvarig aktiverat schemat.' : 'WhatsApp är under uppsättning. Inga automatiska meddelanden skickas ännu.'}</p>
-    <p className="text-sm">Ett tack förbereds när betalningen bekräftas. Påminnelser gäller obetalda engångslöften som väntat minst 7 dagar, högst en per löfte. Bara givare som valt WhatsApp får meddelanden.</p>
+    <p className="text-sm">Ett tack förbereds när betalningen bekräftas. Engångslöften påminns efter 7 dagar. Planer påminns 7 dagar efter ett angivet förfallodatum, högst en gång per obetald delbetalning. Ange planens första förfallodatum i givarens detaljer. Bara givare som valt WhatsApp får meddelanden.</p>
     <button disabled={busy} onClick={reminders} className="rounded-lg bg-mosque-emerald px-4 py-2 text-white disabled:opacity-50">{busy ? 'Förbereder…' : 'Förbered betalningspåminnelser'}</button>
-    {data?.sendingEnabled && <button disabled={busy} onClick={send} className="ml-3 rounded-lg bg-mosque-deep px-4 py-2 text-white disabled:opacity-50">Skicka nästa 3 meddelanden</button>}
+    {data?.sendingEnabled && !data.paused && <button disabled={busy} onClick={send} className="ml-3 rounded-lg bg-mosque-deep px-4 py-2 text-white disabled:opacity-50">Skicka nästa 3 meddelanden</button>}
     {error && <p role="alert" className="text-red-700">{error}</p>}
     {notice && <p role="status">{notice}</p>}
     {!data && !error && <p>Laddar…</p>}
@@ -64,7 +78,7 @@ export default function NotificationPanel() {
       {data.queue.map(entry => {
         const template = data.templates.find(t => t.id === entry.template_id && t.language === entry.language);
         const pledge = entry.donations || entry.payment_plans;
-        const amount = entry.donations?.amount_sek ?? entry.payment_plans?.total_amount_sek;
+        const amount = entry.amount_due ?? entry.donations?.amount_sek ?? entry.payment_plans?.total_amount_sek;
         const preview = template?.body.replaceAll('{{amount}}', String(amount ?? '')).replaceAll('{{reference}}', pledge?.reference ?? '');
         return <article key={entry.id} className="rounded-xl border bg-white p-4 text-sm">
           <p className="font-bold">{entry.donors?.full_name ?? 'Raderad givare'} · {labels[entry.template_id] || entry.template_id} · {labels[entry.delivery_status || entry.status] || entry.status}</p>

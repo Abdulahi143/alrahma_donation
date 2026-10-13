@@ -1,6 +1,6 @@
 # Supabase migrations
 
-For a new, empty project, run `setup.sql` in the Supabase SQL Editor. It applies both migrations in a transaction. Run it once.
+For a new, empty project, run `setup.sql` in the Supabase SQL Editor. It contains the ordered migrations, with their transaction boundaries. Run it once. Existing projects apply only unapplied migration files in filename order; see `DEPLOYMENT_HANDOFF.md`.
 
 For a project that already has the original schema, RLS policies and admins table, run only `migrations/202610100002_registration.sql` inside a transaction. Do not rerun the initial migration.
 
@@ -31,7 +31,7 @@ Applied migration `202610110001_notifications.sql`: notification_templates, noti
 
 New eligible pledges and verified payments create queue entries transactionally. WhatsApp opt-in, a phone number, no opt-out and no donor deletion are required. Opt-out cancels queued entries. Repeated confirmation does not duplicate the queue. Existing pledges are not backfilled automatically.
 
-Admin > WhatsApp-aviseringar shows previews and logs. Queue reminders is an explicit admin action for pending one-time pledges older than 7 days; at most one reminder is created per pledge. Monthly installment reminders require due dates and are deferred.
+Admin > WhatsApp-aviseringar shows previews and delivery status. Reminder preparation is available to admins and the protected cron endpoint. One-time pledges wait seven days; monthly reminders wait seven days after a configured installment due date. Migrations 004–006 add verified installment recording, explicit first due dates, one reminder per unpaid installment, and pause/opt-out controls. See the handoff for deployment and template approval.
 
 Sending is disabled by default through environment flags. The sender rechecks consent and payment status, claims queued rows, and stores provider message IDs. The signed webhook records delivery separately from provider acceptance. See DEPLOYMENT_HANDOFF.md for the remaining hosting, database, Meta template approval and scheduling steps.
 
@@ -43,7 +43,7 @@ Tests: `supabase/tests/notifications.sql` runs fixture assertions in a rolled-ba
 
 Apply `202610130002_whatsapp_delivery.sql`. Set `META_APP_SECRET`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID` on the server. Configure Meta with the public HTTPS URL `/api/whatsapp/webhook` and subscribe to `messages`. Localhost is not accessible to Meta. App publishing and Meta's account requirements must be completed for production callbacks.
 
-The endpoint verifies Meta's HMAC signature, filters by the configured sender number ID, and stores only delivery status and provider message IDs. Duplicate events are ignored. The admin sees Swedish delivery labels; credentials and callback configuration are not exposed in the dashboard. A test sender keeps Meta's test identity; use a dedicated, verified mosque number for the Masjid Al Rahma production identity. The automatic queue sender is implemented and remains disabled by default pending approved templates and provider setup. Current reminders cover one-time pledges, not monthly installments.
+The endpoint verifies Meta's HMAC signature, filters by the configured sender number ID, and stores only delivery status and provider message IDs. Duplicate events are ignored. The admin sees Swedish delivery labels; credentials and callback configuration are not exposed in the dashboard. A test sender keeps Meta's test identity; use a dedicated, verified mosque number for the Masjid Al Rahma production identity. The automatic queue sender is implemented and remains disabled by default pending approved templates and provider setup. Run `npm test` for isolated database and mocked-provider checks.
 
 Test: `node tests/whatsapp-webhook.cjs` (no messages sent).
 
