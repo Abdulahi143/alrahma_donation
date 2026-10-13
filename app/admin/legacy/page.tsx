@@ -2,20 +2,39 @@
 
 import { useEffect, useState } from 'react';
 import { fmtSEK } from '@/lib/format';
+import { supabaseBrowser } from '@/lib/supabase/client';
 import { Donation, Donor, PaymentPlan, CampaignSettings, BroadcastLogEntry } from '@/lib/types';
 
-type Tab = 'overview' | 'donations' | 'donors' | 'pending' | 'plans' | 'broadcast' | 'settings' | 'reports';
+type Tab = 'overview' | 'donations' | 'donors' | 'plans' | 'broadcast' | 'settings' | 'reports';
 
-const NAV: { key: Tab; label: string; icon: string }[] = [
-  { key: 'overview', label: 'Översikt', icon: '📊' },
-  { key: 'donations', label: 'Donationslogg', icon: '🧾' },
-  { key: 'donors', label: 'Givare', icon: '👥' },
-  { key: 'pending', label: 'Väntande godkännanden', icon: '⏳' },
-  { key: 'plans', label: 'Betalningsplaner', icon: '📅' },
-  { key: 'broadcast', label: 'Utskick', icon: '📣' },
-  { key: 'settings', label: 'Betalkonton', icon: '⚙️' },
-  { key: 'reports', label: 'Rapporter', icon: '📁' }
+const NAV: { key: Tab; label: string }[] = [
+  { key: 'overview', label: 'Översikt' },
+  { key: 'donations', label: 'Donationslogg' },
+  { key: 'donors', label: 'Givare' },
+  { key: 'plans', label: 'Betalningsplaner' },
+  { key: 'broadcast', label: 'Utskick' },
+  { key: 'settings', label: 'Betalkonton' },
+  { key: 'reports', label: 'Rapporter' }
 ];
+
+// Line icons (24px grid, 1.8 stroke), drawn from currentColor.
+const ICONS: Record<Tab, string> = {
+  overview: 'M4 13h6V4H4v9Zm0 7h6v-4H4v4Zm10 0h6v-9h-6v9Zm0-16v4h6V4h-6Z',
+  donations: 'M12 21s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.6-7 10-7 10Z',
+  donors: 'M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20M10 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM20 20v-1.5a3.5 3.5 0 0 0-2.5-3.3M15.5 4.7a3.5 3.5 0 0 1 0 6.6',
+  plans: 'M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm3 8h3m2 0h1m-6 4h3',
+  broadcast: 'M4 12v3a1 1 0 0 0 1 1h2l5 4V6L7 10H5a1 1 0 0 0-1 1v1Zm13-3.5a5 5 0 0 1 0 7M19.5 5.5a9 9 0 0 1 0 13',
+  settings: 'M3 7h4m4 0h10M3 17h10m4 0h4M9 4v6m8 4v6',
+  reports: 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Zm0 0v5h5M9 13h6M9 17h6'
+};
+
+function NavIcon({ name }: { name: Tab }) {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="flex-shrink-0">
+      <path d={ICONS[name]} />
+    </svg>
+  );
+}
 
 const STATUS_SV: Record<string, string> = { confirmed: 'bekräftad', pending: 'väntande', rejected: 'avvisad' };
 const METHOD_SV: Record<string, string> = { cash: 'Kontant', swish: 'Swish', card: 'Kort', bank_transfer: 'Banköverföring' };
@@ -67,8 +86,8 @@ export default function AdminDashboard() {
   const [plans, setPlans] = useState<PaymentPlan[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Only the first load blocks the page; later refreshes update in place.
   const refresh = async () => {
-    setLoading(true);
     const [dRes, doRes, pRes] = await Promise.all([
       fetch('/api/admin/donations'),
       fetch('/api/admin/donors'),
@@ -78,6 +97,7 @@ export default function AdminDashboard() {
     setDonations(dJson.donations || []);
     setDonors(doJson.donors || []);
     setPlans(pJson.plans || []);
+    fetch('/api/admin/settings').then((r) => r.json()).then((j) => j.settings?.goal_sek && setGoal(j.settings.goal_sek));
     setLoading(false);
   };
 
@@ -85,19 +105,14 @@ export default function AdminDashboard() {
     refresh();
   }, []);
 
-  const pending = donations.filter((d) => d.status === 'pending');
   const confirmed = donations.filter((d) => d.status === 'confirmed');
   const raised = confirmed.reduce((sum, d) => sum + d.amount_sek, 0);
-  const goal = 15000000;
+  const [goal, setGoal] = useState(15000000);
   const pct = Math.min(100, (raised / goal) * 100);
 
-  const approve = async (id: string, status: 'confirmed' | 'rejected') => {
-    await fetch(`/api/admin/donations/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status })
-    });
-    refresh();
+  const logout = async () => {
+    await supabaseBrowser.auth.signOut();
+    window.location.href = '/admin/login';
   };
 
   return (
@@ -131,10 +146,18 @@ export default function AdminDashboard() {
               tab === item.key ? 'bg-mosque-gold/90 text-mosque-deep' : 'text-mosque-cream/85'
             }`}
           >
-            <span>{item.icon}</span>
+            <NavIcon name={item.key} />
             {sidebarOpen && item.label}
           </button>
         ))}
+
+        <button
+          onClick={logout}
+          title="Logga ut"
+          className={`mt-auto flex items-center rounded-lg py-2.5 text-sm font-semibold text-mosque-cream/85 hover:bg-white/10 ${sidebarOpen ? 'px-3' : 'justify-center px-0'}`}
+        >
+          {sidebarOpen ? 'Logga ut' : 'L'}
+        </button>
       </div>
 
       <div className="min-w-0 flex-1 p-10">
@@ -143,11 +166,10 @@ export default function AdminDashboard() {
         ) : (
           <>
             {tab === 'overview' && (
-              <Overview raised={raised} goal={goal} pct={pct} donorCount={donors.length} pendingCount={pending.length} planCount={plans.length} recent={confirmed.slice(0, 5)} />
+              <Overview raised={raised} goal={goal} pct={pct} donorCount={donors.length} planCount={plans.length} recent={confirmed.slice(0, 5)} />
             )}
             {tab === 'donations' && <DonationsLog donations={donations} onRefresh={refresh} />}
             {tab === 'donors' && <Donors donors={donors} onRefresh={refresh} />}
-            {tab === 'pending' && <Pending pending={pending} onDecide={approve} />}
             {tab === 'plans' && <Plans plans={plans} onRefresh={refresh} />}
             {tab === 'broadcast' && <Broadcast donors={donors} />}
             {tab === 'settings' && <Settings />}
@@ -159,17 +181,16 @@ export default function AdminDashboard() {
   );
 }
 
-function Overview({ raised, goal, pct, donorCount, pendingCount, planCount, recent }: any) {
+function Overview({ raised, goal, pct, donorCount, planCount, recent }: any) {
   const stats = [
     { label: 'Insamlat totalt', value: fmtSEK(raised), color: 'text-mosque-emerald' },
     { label: 'Registrerade givare', value: String(donorCount), color: 'text-mosque-ink' },
-    { label: 'Väntande godkännanden', value: String(pendingCount), color: 'text-amber-600' },
     { label: 'Aktiva betalningsplaner', value: String(planCount), color: 'text-mosque-ink' }
   ];
   return (
     <div>
       <h1 className="mb-6 text-2xl font-extrabold text-mosque-ink">Översikt</h1>
-      <div className="mb-7 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mb-7 grid grid-cols-2 gap-4 lg:grid-cols-3">
         {stats.map((s) => (
           <div key={s.label} className="rounded-2xl border border-mosque-ink/10 bg-white p-5">
             <div className="text-xs font-bold uppercase tracking-wide text-mosque-ink/50">{s.label}</div>
@@ -400,30 +421,6 @@ function Donors({ donors, onRefresh }: { donors: Donor[]; onRefresh: () => void 
   );
 }
 
-function Pending({ pending, onDecide }: { pending: Donation[]; onDecide: (id: string, status: 'confirmed' | 'rejected') => void }) {
-  return (
-    <div>
-      <h1 className="mb-5 text-2xl font-extrabold text-mosque-ink">Väntande godkännanden</h1>
-      <div className="flex flex-col gap-3">
-        {pending.length === 0 && <div className="p-10 text-center text-sm text-mosque-ink/40">Inga väntande betalningar</div>}
-        {pending.map((p) => (
-          <div key={p.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-mosque-ink/10 bg-white p-5">
-            <div>
-              <div className="text-sm font-bold text-mosque-ink">{p.display_name}</div>
-              <div className="text-xs text-mosque-ink/50">{METHOD_SV[p.method] || p.method}</div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="text-base font-extrabold text-mosque-emerald">{fmtSEK(p.amount_sek)}</div>
-              <button onClick={() => onDecide(p.id, 'confirmed')} className="rounded-lg bg-mosque-emerald px-3.5 py-2 text-xs font-bold text-white">Godkänn</button>
-              <button onClick={() => onDecide(p.id, 'rejected')} className="rounded-lg bg-red-100 px-3.5 py-2 text-xs font-bold text-red-600">Avvisa</button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function Plans({ plans, onRefresh }: { plans: PaymentPlan[]; onRefresh: () => void }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -627,6 +624,14 @@ function Settings() {
         bankgiro: settings.bankgiro,
         iban: settings.iban,
         paypalLink: settings.paypal_link,
+        paypalPlaceholder: settings.paypal_placeholder,
+        goalSek: settings.goal_sek,
+        plusgiro: settings.plusgiro,
+        bankName: settings.bank_name,
+        accountHolder: settings.account_holder,
+        accountNumber: settings.account_number,
+        bic: settings.bic,
+        cardLink: settings.card_link,
         isLive: settings.is_live,
         pausedMessage: settings.paused_message,
         transparencyFiles: settings.transparency_files
@@ -652,15 +657,6 @@ function Settings() {
   };
 
   if (!settings) return <div className="text-sm text-mosque-ink/50">Laddar…</div>;
-
-  // Deterministisk platshållarmönster från Swish-numret — inte en riktig,
-  // skanningsbar kod. Koppla SWISH_MERCHANT_ID (se .env.example) för en riktig.
-  let h = 0;
-  for (const ch of settings.swish_number) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  const cells = Array.from({ length: 144 }, () => {
-    h = (h * 1103515245 + 12345) >>> 0;
-    return h % 100 < 45;
-  });
 
   return (
     <div>
@@ -697,6 +693,10 @@ function Settings() {
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.3fr_1fr] items-start">
         <div className="rounded-2xl border border-mosque-ink/10 bg-white p-6">
+          <div className="mb-4">
+            <div className="mb-1.5 text-xs font-bold text-mosque-ink/50">Insamlingsmål (SEK)</div>
+            <input type="number" min={1} value={settings.goal_sek ?? ''} onChange={(e) => setSettings({ ...settings, goal_sek: Number(e.target.value) })} className="w-full rounded-lg border border-mosque-ink/15 px-3 py-2 text-sm" />
+          </div>
           <div className="mb-3 grid grid-cols-2 gap-3">
             <div>
               <div className="mb-1.5 text-xs font-bold text-mosque-ink/50">Swish-nummer</div>
@@ -710,25 +710,51 @@ function Settings() {
           <div className="mb-4">
             <div className="mb-1.5 text-xs font-bold text-mosque-ink/50">PayPal-länk (t.ex. paypal.me/dittnamn) — visas som QR-kod på startsidan</div>
             <input value={settings.paypal_link ?? ''} onChange={(e) => setSettings({ ...settings, paypal_link: e.target.value })} placeholder="paypal.me/alrahma" className="w-full rounded-lg border border-mosque-ink/15 px-3 py-2 text-sm" />
+            <label className="mt-2 flex items-center gap-2 text-xs text-mosque-ink/70">
+              <input type="checkbox" checked={settings.paypal_placeholder ?? true} onChange={(e) => setSettings({ ...settings, paypal_placeholder: e.target.checked })} />
+              Visa Swish-QR som platshållare i PayPal-rutan tills en PayPal-länk anges
+            </label>
           </div>
           <div className="mb-4">
-            <div className="mb-1.5 text-xs font-bold text-mosque-ink/50">IBAN</div>
-            <input value={settings.iban} onChange={(e) => setSettings({ ...settings, iban: e.target.value })} className="w-full rounded-lg border border-mosque-ink/15 px-3 py-2 text-sm" />
+            <div className="mb-1.5 text-xs font-bold text-mosque-ink/50">Kort/online-betalningslänk (t.ex. Stripe, Swedbank Pay) — visas som QR-kod på startsidan</div>
+            <input value={settings.card_link ?? ''} onChange={(e) => setSettings({ ...settings, card_link: e.target.value })} placeholder="https://give.alrahma.se" className="w-full rounded-lg border border-mosque-ink/15 px-3 py-2 text-sm" />
+          </div>
+          <div className="mb-1 mt-5 text-sm font-extrabold">Bankuppgifter</div>
+          <div className="mb-3 text-[11px] text-mosque-ink/50">Visas på startsidan. Tomma fält döljs. Med IBAN + kontoinnehavare visas även en bank-QR (GiroCode).</div>
+          <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <div className="mb-1.5 text-xs font-bold text-mosque-ink/50">Kontoinnehavare</div>
+              <input value={settings.account_holder ?? ''} onChange={(e) => setSettings({ ...settings, account_holder: e.target.value })} placeholder="Al-Rahma Mosque" className="w-full rounded-lg border border-mosque-ink/15 px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <div className="mb-1.5 text-xs font-bold text-mosque-ink/50">Bank</div>
+              <input value={settings.bank_name ?? ''} onChange={(e) => setSettings({ ...settings, bank_name: e.target.value })} placeholder="Swedbank" className="w-full rounded-lg border border-mosque-ink/15 px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <div className="mb-1.5 text-xs font-bold text-mosque-ink/50">Kontonummer (clearing + konto)</div>
+              <input value={settings.account_number ?? ''} onChange={(e) => setSettings({ ...settings, account_number: e.target.value })} placeholder="" className="w-full rounded-lg border border-mosque-ink/15 px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <div className="mb-1.5 text-xs font-bold text-mosque-ink/50">IBAN</div>
+              <input value={settings.iban ?? ''} onChange={(e) => setSettings({ ...settings, iban: e.target.value })} placeholder="" className="w-full rounded-lg border border-mosque-ink/15 px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <div className="mb-1.5 text-xs font-bold text-mosque-ink/50">BIC / SWIFT</div>
+              <input value={settings.bic ?? ''} onChange={(e) => setSettings({ ...settings, bic: e.target.value })} placeholder="" className="w-full rounded-lg border border-mosque-ink/15 px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <div className="mb-1.5 text-xs font-bold text-mosque-ink/50">Plusgiro</div>
+              <input value={settings.plusgiro ?? ''} onChange={(e) => setSettings({ ...settings, plusgiro: e.target.value })} placeholder="" className="w-full rounded-lg border border-mosque-ink/15 px-3 py-2 text-sm" />
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <button onClick={save} className="rounded-lg bg-mosque-emerald px-4 py-2 text-sm font-bold text-white">Spara ändringar</button>
             {saved && <span className="text-sm font-bold text-mosque-emerald">Sparat</span>}
           </div>
         </div>
-        <div className="rounded-2xl border border-mosque-ink/10 bg-white p-6 text-center">
-          <div className="mb-3 text-xs font-bold text-mosque-ink/50">Swish QR-kod</div>
-          <div className="mx-auto grid w-44 grid-cols-12 overflow-hidden rounded-md border-8 border-white shadow-[0_0_0_1px_#e7e2d2]">
-            {cells.map((on, i) => (
-              <div key={i} className="pb-[100%]" style={{ background: on ? '#0e2a14' : '#fff' }} />
-            ))}
-          </div>
-          <div className="mt-3 text-sm font-extrabold">{settings.swish_number}</div>
-          <div className="mt-1.5 text-[11px] text-mosque-ink/50">Demo-QR (ej skanningsbar) — ange SWISH_MERCHANT_ID för en riktig kod</div>
+        <div className="flex flex-col gap-4">
+          <QrUpload kind="swish" title="Swish QR-kod" url={settings.swish_qr_url} onChange={(u) => setSettings({ ...settings, swish_qr_url: u })} />
+          <QrUpload kind="paypal" title="PayPal QR-kod" url={settings.paypal_qr_url} onChange={(u) => setSettings({ ...settings, paypal_qr_url: u })} />
         </div>
       </div>
 
@@ -759,6 +785,58 @@ function Settings() {
         </div>
         <button onClick={addFile} className="rounded-lg bg-mosque-ink/10 px-3 py-1.5 text-xs font-bold text-mosque-ink">+ Lägg till fil</button>
       </div>
+    </div>
+  );
+}
+
+// Upload your own QR image (e.g. the Swish/PayPal business QR). Saved
+// immediately; shown on the public page instead of the generated QR.
+function QrUpload({ kind, title, url, onChange }: { kind: 'swish' | 'paypal'; title: string; url: string; onChange: (url: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const upload = async (file: File) => {
+    setBusy(true);
+    setError(null);
+    const form = new FormData();
+    form.append('kind', kind);
+    form.append('file', file);
+    const res = await fetch('/api/admin/qr', { method: 'POST', body: form });
+    const json = await res.json();
+    setBusy(false);
+    if (!res.ok) return setError(json.error || 'Uppladdningen misslyckades');
+    onChange(json.url);
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    await fetch(`/api/admin/qr?kind=${kind}`, { method: 'DELETE' });
+    setBusy(false);
+    onChange('');
+  };
+
+  return (
+    <div className="rounded-2xl border border-mosque-ink/10 bg-white p-6 text-center">
+      <div className="mb-3 text-xs font-bold text-mosque-ink/50">{title}</div>
+      {url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt={title} className="mx-auto h-44 w-44 rounded-md border border-mosque-ink/10 object-contain" />
+      ) : (
+        <div className="mx-auto flex h-44 w-44 items-center justify-center rounded-md border border-dashed border-mosque-ink/20 text-xs text-mosque-ink/40">
+          Ingen uppladdad bild — en genererad kod visas
+        </div>
+      )}
+      <div className="mt-3 flex items-center justify-center gap-2">
+        <label className="cursor-pointer rounded-lg bg-mosque-emerald px-3 py-1.5 text-xs font-bold text-white">
+          {busy ? 'Laddar upp…' : url ? 'Byt bild' : 'Ladda upp bild'}
+          <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" disabled={busy} className="hidden" onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
+        </label>
+        {url && (
+          <button onClick={remove} disabled={busy} className="rounded-lg bg-mosque-ink/10 px-3 py-1.5 text-xs font-bold text-mosque-ink">Ta bort</button>
+        )}
+      </div>
+      {error && <div className="mt-2 text-xs font-semibold text-red-600">{error}</div>}
+      <div className="mt-1.5 text-[11px] text-mosque-ink/50">PNG, JPG, WebP eller SVG, max 2 MB</div>
     </div>
   );
 }

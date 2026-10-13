@@ -92,34 +92,63 @@ create trigger trg_bump_campaign_total
 -- Realtime: enable so the public tracker can subscribe to new confirmed donations
 alter publication supabase_realtime add table donations;
 
--- Payment accounts shown to donors at checkout (Swish/Bankgiro/IBAN), editable in
--- the admin "Payment accounts" tab. Single row, same pattern as campaign_totals.
+-- Everything the public page shows that an admin can change (admin "Betalkonton"
+-- tab). Single row (id='main'), same pattern as campaign_totals. The campaign
+-- goal lives in campaign_totals.goal_sek and is edited from the same tab.
 create table if not exists campaign_settings (
   id text primary key default 'main',
+
+  -- Swish
   swish_number text not null default '123 456 78 90',
+
+  -- Bank transfer (rows left empty are hidden on the public page)
   bankgiro text not null default '5678-1234',
+  plusgiro text not null default '',
   iban text not null default 'SE45 5000 0000 0583 9825 7466',
-  -- PayPal.Me link or username shown as a QR code on the public front page.
+  bic text not null default '',
+  bank_name text not null default '',
+  account_holder text not null default '',
+  account_number text not null default '',
+
+  -- QR links: PayPal.Me link/username and online card checkout URL
   paypal_link text not null default '',
-  -- Live/paused toggle for the public tracker (admin "Betalkonton" tab).
-  -- When false, the tracker shows paused_message instead of the live feed
-  -- and registration form.
+  -- While paypal_link is empty, show the Swish QR in the PayPal slot
+  paypal_placeholder boolean not null default true,
+  card_link text not null default '',
+  -- Own uploaded QR images (public URLs in the "qr-codes" Storage bucket);
+  -- when set they replace the generated QR for that method.
+  swish_qr_url text not null default '',
+  paypal_qr_url text not null default '',
+
+  -- Live/paused toggle for the public tracker. When false, the tracker shows
+  -- paused_message instead of the live feed and registration form.
   is_live boolean not null default true,
   paused_message text not null default 'Kampanjen är pausad för tillfället. Tack för ert tålamod — vi är snart tillbaka.',
-  -- Transparency attachments (receipts, progress photos, contractor
-  -- invoices) donors see on the post-donation thank-you screen, as
-  -- {label, url} pairs. Admin pastes links to files hosted in Supabase
-  -- Storage or elsewhere; no upload pipeline is implied here.
+
+  -- Transparency attachments (receipts, photos, invoices) shown on the
+  -- thank-you screen, as {label, url} pairs (links to Supabase Storage etc.).
   transparency_files jsonb not null default '[]'::jsonb,
   updated_at timestamptz not null default now()
 );
 insert into campaign_settings (id) values ('main') on conflict do nothing;
 
--- Migration for existing deployments created before this column set:
+-- Migration for deployments created before these columns existed
 alter table campaign_settings add column if not exists paypal_link text not null default '';
+alter table campaign_settings add column if not exists paypal_placeholder boolean not null default true;
 alter table campaign_settings add column if not exists is_live boolean not null default true;
 alter table campaign_settings add column if not exists paused_message text not null default 'Kampanjen är pausad för tillfället. Tack för ert tålamod — vi är snart tillbaka.';
 alter table campaign_settings add column if not exists transparency_files jsonb not null default '[]'::jsonb;
+alter table campaign_settings add column if not exists plusgiro text not null default '';
+alter table campaign_settings add column if not exists bank_name text not null default '';
+alter table campaign_settings add column if not exists account_holder text not null default '';
+alter table campaign_settings add column if not exists account_number text not null default '';
+alter table campaign_settings add column if not exists bic text not null default '';
+alter table campaign_settings add column if not exists card_link text not null default '';
+alter table campaign_settings add column if not exists swish_qr_url text not null default '';
+alter table campaign_settings add column if not exists paypal_qr_url text not null default '';
+
+-- Public bucket for uploaded QR images (writes only via the admin API, service role)
+insert into storage.buckets (id, name, public) values ('qr-codes', 'qr-codes', true) on conflict do nothing;
 
 -- Audit trail of every SMS/email broadcast sent from the admin Broadcast tab.
 -- Does not store per-recipient rows (only a count) to avoid duplicating PII;
