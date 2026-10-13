@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = supabaseAdmin();
-  const { data, error } = await supabase.from('donors').upsert(payload, { onConflict: 'email' }).select();
+  const { data, error } = await supabase.from('donors').insert(payload).select();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ imported: data?.length || 0, skipped });

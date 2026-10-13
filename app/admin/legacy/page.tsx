@@ -3,9 +3,14 @@
 import { useEffect, useState } from 'react';
 import { fmtSEK } from '@/lib/format';
 import { supabaseBrowser } from '@/lib/supabase/client';
-import { Donation, Donor, PaymentPlan, CampaignSettings, BroadcastLogEntry } from '@/lib/types';
+import NotificationPanel from '@/components/NotificationPanel';
+import BroadcastPanel from '@/components/BroadcastPanel';
+import DonorDetails from '@/components/DonorDetails';
+import AdminIcon, { AdminIconName } from '@/components/AdminIcon';
+import { donorSummary, notificationChoices, planProgress } from '@/lib/donors';
+import { Donation, Donor, PaymentPlan, CampaignSettings } from '@/lib/types';
 
-type Tab = 'overview' | 'donations' | 'donors' | 'plans' | 'broadcast' | 'settings' | 'reports';
+type Tab = 'overview' | 'donations' | 'donors' | 'plans' | 'broadcast' | 'notifications' | 'settings' | 'reports';
 
 const NAV: { key: Tab; label: string }[] = [
   { key: 'overview', label: 'Översikt' },
@@ -13,28 +18,10 @@ const NAV: { key: Tab; label: string }[] = [
   { key: 'donors', label: 'Givare' },
   { key: 'plans', label: 'Betalningsplaner' },
   { key: 'broadcast', label: 'Utskick' },
+  { key: 'notifications', label: 'WhatsApp-aviseringar' },
   { key: 'settings', label: 'Betalkonton' },
   { key: 'reports', label: 'Rapporter' }
 ];
-
-// Line icons (24px grid, 1.8 stroke), drawn from currentColor.
-const ICONS: Record<Tab, string> = {
-  overview: 'M4 13h6V4H4v9Zm0 7h6v-4H4v4Zm10 0h6v-9h-6v9Zm0-16v4h6V4h-6Z',
-  donations: 'M12 21s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.6-7 10-7 10Z',
-  donors: 'M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20M10 11.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7ZM20 20v-1.5a3.5 3.5 0 0 0-2.5-3.3M15.5 4.7a3.5 3.5 0 0 1 0 6.6',
-  plans: 'M7 3v3M17 3v3M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm3 8h3m2 0h1m-6 4h3',
-  broadcast: 'M4 12v3a1 1 0 0 0 1 1h2l5 4V6L7 10H5a1 1 0 0 0-1 1v1Zm13-3.5a5 5 0 0 1 0 7M19.5 5.5a9 9 0 0 1 0 13',
-  settings: 'M3 7h4m4 0h10M3 17h10m4 0h4M9 4v6m8 4v6',
-  reports: 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Zm0 0v5h5M9 13h6M9 17h6'
-};
-
-function NavIcon({ name }: { name: Tab }) {
-  return (
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="flex-shrink-0">
-      <path d={ICONS[name]} />
-    </svg>
-  );
-}
 
 const STATUS_SV: Record<string, string> = { confirmed: 'bekräftad', pending: 'väntande', rejected: 'avvisad' };
 const METHOD_SV: Record<string, string> = { cash: 'Kontant', swish: 'Swish', card: 'Kort', bank_transfer: 'Banköverföring' };
@@ -86,8 +73,8 @@ export default function AdminDashboard() {
   const [plans, setPlans] = useState<PaymentPlan[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Only the first load blocks the page; later refreshes update in place.
-  const refresh = async () => {
+  const refresh = async (silent = true) => {
+    if (!silent) setLoading(true);
     const [dRes, doRes, pRes] = await Promise.all([
       fetch('/api/admin/donations'),
       fetch('/api/admin/donors'),
@@ -117,7 +104,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="flex min-h-screen bg-mosque-cream">
-      <div className={`flex flex-shrink-0 flex-col gap-0.5 bg-mosque-deep p-3 text-mosque-cream transition-all duration-200 ${sidebarOpen ? 'w-60 p-4' : 'w-16 items-center'}`}>
+      <div className={`flex flex-shrink-0 flex-col gap-0.5 bg-mosque-deep p-3 text-mosque-cream transition-all duration-200 ${sidebarOpen ? 'w-72 p-4' : 'w-16 items-center'}`}>
         <div className={`mb-5 flex items-center border-b border-white/10 pb-5 ${sidebarOpen ? 'justify-between gap-2.5 px-2' : 'flex-col gap-3'}`}>
           <div className="flex items-center gap-2.5">
             <img src="/logo.png" alt="Masjid Al-Rahma" className="h-10 w-10 flex-shrink-0" />
@@ -133,20 +120,23 @@ export default function AdminDashboard() {
             aria-label={sidebarOpen ? 'Stäng sidopanelen' : 'Öppna sidopanelen'}
             className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-mosque-cream/70 hover:bg-white/10"
           >
-            {sidebarOpen ? '‹' : '›'}
+            <AdminIcon name={sidebarOpen ? 'collapse' : 'expand'} className="h-4 w-4" />
           </button>
         </div>
 
+        {sidebarOpen && <p className="mb-3 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-mosque-mint/50">Administration</p>}
         {NAV.map((item) => (
           <button
             key={item.key}
             onClick={() => setTab(item.key)}
             title={item.label}
-            className={`flex items-center gap-2.5 rounded-lg py-2.5 text-left text-sm font-semibold ${sidebarOpen ? 'px-3' : 'justify-center px-0'} ${
-              tab === item.key ? 'bg-mosque-gold/90 text-mosque-deep' : 'text-mosque-cream/85'
+            aria-label={item.label}
+            aria-current={tab === item.key ? 'page' : undefined}
+            className={`flex items-center gap-3 rounded-xl py-3 text-left text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-mosque-gold ${sidebarOpen ? 'px-3' : 'justify-center px-0'} ${
+              tab === item.key ? 'bg-white/10 text-white ring-1 ring-white/15 shadow-sm' : 'text-mosque-cream/65 hover:bg-white/5 hover:text-white'
             }`}
           >
-            <NavIcon name={item.key} />
+            <AdminIcon name={item.key} />
             {sidebarOpen && item.label}
           </button>
         ))}
@@ -160,18 +150,19 @@ export default function AdminDashboard() {
         </button>
       </div>
 
-      <div className="min-w-0 flex-1 p-10">
+      <div className="min-w-0 flex-1 p-5 sm:p-8 lg:p-10">
         {loading ? (
           <div className="text-sm text-mosque-ink/50">Laddar…</div>
         ) : (
           <>
+            {tab === 'notifications' && <NotificationPanel />}
             {tab === 'overview' && (
               <Overview raised={raised} goal={goal} pct={pct} donorCount={donors.length} planCount={plans.length} recent={confirmed.slice(0, 5)} />
             )}
             {tab === 'donations' && <DonationsLog donations={donations} onRefresh={refresh} />}
-            {tab === 'donors' && <Donors donors={donors} onRefresh={refresh} />}
-            {tab === 'plans' && <Plans plans={plans} onRefresh={refresh} />}
-            {tab === 'broadcast' && <Broadcast donors={donors} />}
+            {tab === 'donors' && <Donors donors={donors} donations={donations} plans={plans} onRefresh={() => refresh(true)} />}
+            {tab === 'plans' && <Plans plans={plans} donations={donations} onRefresh={refresh} />}
+            {tab === 'broadcast' && <BroadcastPanel donors={donors} />}
             {tab === 'settings' && <Settings />}
             {tab === 'reports' && <Reports />}
           </>
@@ -183,16 +174,17 @@ export default function AdminDashboard() {
 
 function Overview({ raised, goal, pct, donorCount, planCount, recent }: any) {
   const stats = [
-    { label: 'Insamlat totalt', value: fmtSEK(raised), color: 'text-mosque-emerald' },
-    { label: 'Registrerade givare', value: String(donorCount), color: 'text-mosque-ink' },
-    { label: 'Aktiva betalningsplaner', value: String(planCount), color: 'text-mosque-ink' }
+    { label: 'Insamlat totalt', value: fmtSEK(raised), color: 'text-mosque-emerald', icon: 'donations' },
+    { label: 'Registrerade givare', value: String(donorCount), color: 'text-mosque-ink', icon: 'donors' },
+    { label: 'Aktiva betalningsplaner', value: String(planCount), color: 'text-mosque-ink', icon: 'plans' }
   ];
   return (
     <div>
       <h1 className="mb-6 text-2xl font-extrabold text-mosque-ink">Översikt</h1>
       <div className="mb-7 grid grid-cols-2 gap-4 lg:grid-cols-3">
         {stats.map((s) => (
-          <div key={s.label} className="rounded-2xl border border-mosque-ink/10 bg-white p-5">
+          <div key={s.label} className="rounded-2xl border border-mosque-ink/10 bg-white p-5 shadow-sm">
+            <div className={`mb-4 inline-flex rounded-xl bg-mosque-cream p-2.5 ${s.color}`}><AdminIcon name={s.icon as AdminIconName} /></div>
             <div className="text-xs font-bold uppercase tracking-wide text-mosque-ink/50">{s.label}</div>
             <div className={`mt-2 text-2xl font-extrabold ${s.color}`}>{s.value}</div>
           </div>
@@ -336,7 +328,9 @@ function DonationsLog({ donations, onRefresh }: { donations: Donation[]; onRefre
   );
 }
 
-function Donors({ donors, onRefresh }: { donors: Donor[]; onRefresh: () => void }) {
+function Donors({ donors, donations, plans, onRefresh }: { donors: Donor[]; donations: Donation[]; plans: PaymentPlan[]; onRefresh: () => void }) {
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const detail = donors.find(d => d.id === detailId);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -403,31 +397,40 @@ function Donors({ donors, onRefresh }: { donors: Donor[]; onRefresh: () => void 
           </div>
         </div>
       )}
-      <div className="overflow-hidden rounded-2xl border border-mosque-ink/10 bg-white">
-        <div className="grid grid-cols-5 gap-2 bg-mosque-cream px-5 py-3 text-xs font-bold uppercase tracking-wide text-mosque-ink/50">
-          <div>Namn</div><div>Telefon</div><div>E-post</div><div>Samtycke</div><div></div>
-        </div>
-        {donors.map((d) => (
-          <div key={d.id} className="grid grid-cols-5 gap-2 border-t border-mosque-ink/5 px-5 py-3.5 text-sm items-center">
-            <div className="font-bold text-mosque-ink">{d.full_name}</div>
-            <div className="text-mosque-ink/60">{d.phone || '—'}</div>
-            <div className="text-mosque-ink/60">{d.email}</div>
-            <div className="text-mosque-ink/60">{d.gdpr_consent ? 'Givet' : '—'}</div>
-            <button onClick={() => erase(d.id)} className="justify-self-end text-xs font-bold text-red-600">Radera (GDPR)</button>
-          </div>
-        ))}
+      <div className="overflow-x-auto rounded-2xl border border-mosque-ink/10 bg-white">
+        <table className="w-full min-w-[950px] text-left text-sm">
+          <thead className="bg-mosque-cream text-xs text-mosque-ink/60"><tr>{['Givare', 'Utlovat', 'Betalt', 'Kvar', 'Delbetalningar', 'Betalningsmetod', 'Aviseringar', 'Åtgärder'].map(label => <th key={label} className="px-4 py-3">{label}</th>)}</tr></thead>
+          <tbody>{donors.map(d => {
+            const summary = donorSummary(d.id, donations, plans);
+            return <tr key={d.id} className="border-t border-mosque-ink/10">
+              <td className="px-4 py-3"><button onClick={() => setDetailId(d.id)} className="font-bold text-mosque-emerald underline">{d.full_name}</button><p className="text-xs text-mosque-ink/60">{d.email}</p></td>
+              <td className="px-4 py-3">{fmtSEK(summary.pledged)}</td>
+              <td className="px-4 py-3 font-bold text-mosque-emerald">{fmtSEK(summary.paid)}</td>
+              <td className="px-4 py-3">{fmtSEK(summary.remaining)}</td>
+              <td className="px-4 py-3">{summary.plans.length ? summary.plans.map(p => <span key={p.id} title="Betalda månadsbelopp | totalt antal månader" className="mr-2 inline-block rounded-lg bg-mosque-cream px-2.5 py-1 font-semibold tabular-nums">{planProgress(p, donations)}</span>) : '—'}</td>
+              <td className="px-4 py-3">{summary.methods}</td>
+              <td className="px-4 py-3">{notificationChoices(d)}</td>
+              <td className="space-y-2 px-4 py-3"><button onClick={() => setDetailId(d.id)} className="block text-mosque-emerald">Visa detaljer</button><button onClick={() => erase(d.id)} className="block text-xs text-red-600">Radera (GDPR)</button></td>
+            </tr>;
+          })}</tbody>
+        </table>
+        {!donors.length && <p className="p-5 text-sm">Inga givare registrerade.</p>}
       </div>
+      {detail && <DonorDetails key={detail.id} donor={detail} donations={donations} plans={plans} onUpdated={onRefresh} onClose={() => setDetailId(null)} />}
     </div>
   );
 }
 
-function Plans({ plans, onRefresh }: { plans: PaymentPlan[]; onRefresh: () => void }) {
+function Plans({ plans, donations, onRefresh }: { plans: PaymentPlan[]; donations: Donation[]; onRefresh: () => void }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [total, setTotal] = useState('');
   const [months, setMonths] = useState('6');
+  const [planError, setPlanError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const startEdit = (p: PaymentPlan) => {
+    setPlanError('');
     setEditingId(p.id);
     setName(p.display_name);
     setTotal(String(p.total_amount_sek));
@@ -442,14 +445,16 @@ function Plans({ plans, onRefresh }: { plans: PaymentPlan[]; onRefresh: () => vo
   };
 
   const save = async () => {
+    if (saving) return;
+    setSaving(true); setPlanError('');
     const body = JSON.stringify({ displayName: name, totalAmountSek: Number(total), months: Number(months) });
-    if (editingId) {
-      await fetch(`/api/admin/plans/${editingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body });
-    } else {
-      await fetch('/api/admin/plans', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
-    }
-    cancelEdit();
-    onRefresh();
+    try {
+      const res = await fetch(editingId ? `/api/admin/plans/${editingId}` : '/api/admin/plans', { method: editingId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body });
+      const result = await res.json();
+      if (!res.ok) { setPlanError(result.error || 'Planen kunde inte sparas.'); return; }
+      cancelEdit(); onRefresh();
+    } catch { setPlanError('Kunde inte ansluta. Försök igen.'); }
+    finally { setSaving(false); }
   };
 
   const remove = async (id: string) => {
@@ -471,7 +476,7 @@ function Plans({ plans, onRefresh }: { plans: PaymentPlan[]; onRefresh: () => vo
             <div className="font-extrabold text-mosque-emerald">{fmtSEK(p.total_amount_sek)}</div>
             <div className="text-mosque-ink/60">{p.months} månader</div>
             <div className="text-mosque-ink/60">{fmtSEK(p.amount_per_month_sek)}</div>
-            <div className="text-mosque-ink/50">{p.installments_paid}/{p.months} betalda</div>
+            <div className="text-mosque-ink/50">{planProgress(p, donations)} månadsbelopp betalda</div>
             <div className="flex justify-end gap-3">
               <button onClick={() => startEdit(p)} className="text-xs font-bold text-mosque-ink/50">Redigera</button>
               <button onClick={() => remove(p.id)} className="text-xs font-bold text-red-600">Avbryt</button>
@@ -490,117 +495,11 @@ function Plans({ plans, onRefresh }: { plans: PaymentPlan[]; onRefresh: () => vo
             <option value="12">12 månader</option>
           </select>
           <div className="flex gap-2">
-            <button onClick={save} className="flex-1 rounded-lg bg-mosque-emerald px-4 py-2 text-sm font-bold text-white">{editingId ? 'Spara' : 'Skapa'}</button>
+            <button disabled={saving} onClick={save} className="flex-1 rounded-lg bg-mosque-emerald px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{saving ? 'Sparar…' : editingId ? 'Spara' : 'Skapa'}</button>
             {editingId && <button onClick={cancelEdit} className="rounded-lg bg-mosque-ink/10 px-4 py-2 text-sm font-bold text-mosque-ink">Avbryt</button>}
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function Broadcast({ donors }: { donors: Donor[] }) {
-  const [message, setMessage] = useState('');
-  const [selected, setSelected] = useState<Set<string>>(new Set(donors.map((d) => d.id)));
-  const [log, setLog] = useState<BroadcastLogEntry[]>([]);
-  const [toast, setToast] = useState('');
-  const [sending, setSending] = useState(false);
-
-  useEffect(() => {
-    setSelected(new Set(donors.map((d) => d.id)));
-  }, [donors]);
-
-  useEffect(() => {
-    fetch('/api/admin/broadcast').then((r) => r.json()).then((j) => setLog(j.log || []));
-  }, []);
-
-  const toggle = (id: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-
-  const selectedDonors = donors.filter((d) => selected.has(d.id));
-  const smsReach = selectedDonors.filter((d) => d.phone && d.comm_sms && !d.comm_opt_out).length;
-  const emailReach = selectedDonors.filter((d) => d.email && d.comm_email && !d.comm_opt_out).length;
-
-  const send = async (channel: 'sms' | 'email') => {
-    if (!message.trim() || sending) return;
-    setSending(true);
-    const res = await fetch('/api/admin/broadcast', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ channel, message, donorIds: Array.from(selected) })
-    });
-    const json = await res.json();
-    setSending(false);
-    if (json.error) return setToast(json.error);
-    setToast(`Skickat till ${json.recipients} mottagare${json.simulated ? ' (simulerat — ingen leverantör konfigurerad)' : ''}`);
-    setMessage('');
-    fetch('/api/admin/broadcast').then((r) => r.json()).then((j) => setLog(j.log || []));
-    setTimeout(() => setToast(''), 5000);
-  };
-
-  return (
-    <div>
-      <h1 className="mb-1 text-2xl font-extrabold text-mosque-ink">Utskick</h1>
-      <div className="mb-5 text-sm text-mosque-ink/60">Skicka SMS eller e-post till valda givare</div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[2fr_1fr] items-start">
-        <div className="rounded-2xl border border-mosque-ink/10 bg-white p-5">
-          <div className="mb-2 text-xs font-bold text-mosque-ink/50">Meddelande</div>
-          <textarea
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder="t.ex. JazakAllah Khair — vi har nått 45% av vårt mål!"
-            className="min-h-[120px] w-full rounded-lg border border-mosque-ink/15 p-3 text-sm"
-          />
-          {toast && <div className="mt-3 rounded-lg bg-mosque-emerald/10 p-3 text-sm font-bold text-mosque-emerald">{toast}</div>}
-          <div className="mt-4 flex gap-2">
-            <button disabled={!message.trim() || sending} onClick={() => send('sms')} className="whitespace-nowrap rounded-lg bg-mosque-emerald px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">
-              Skicka SMS ({smsReach})
-            </button>
-            <button disabled={!message.trim() || sending} onClick={() => send('email')} className="whitespace-nowrap rounded-lg bg-mosque-emerald px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">
-              Skicka e-post ({emailReach})
-            </button>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-mosque-ink/10 bg-white p-5">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-xs font-bold uppercase text-mosque-ink/50">Mottagare</div>
-            <button onClick={() => setSelected(selected.size === donors.length ? new Set() : new Set(donors.map((d) => d.id)))} className="text-xs font-bold text-mosque-emerald">
-              {selected.size === donors.length ? 'Avmarkera alla' : 'Markera alla'}
-            </button>
-          </div>
-          <div className="max-h-56 overflow-y-auto rounded-lg border border-mosque-ink/10">
-            {donors.map((d) => (
-              <label key={d.id} className="flex items-center gap-2 border-b border-mosque-ink/5 px-3 py-2 last:border-0">
-                <input type="checkbox" checked={selected.has(d.id)} onChange={() => toggle(d.id)} />
-                <span className="min-w-0 flex-1 truncate text-sm font-semibold">{d.full_name}</span>
-              </label>
-            ))}
-          </div>
-          <div className="mt-3 flex justify-between text-sm font-bold"><span>Valda</span><span className="text-mosque-emerald">{selected.size}</span></div>
-        </div>
-      </div>
-
-      <div className="mt-6">
-        <div className="mb-3 text-sm font-extrabold text-mosque-ink">Skickhistorik</div>
-        <div className="overflow-hidden rounded-2xl border border-mosque-ink/10 bg-white">
-          {log.length === 0 && <div className="p-8 text-center text-sm text-mosque-ink/40">Inget skickat än</div>}
-          {log.map((l) => (
-            <div key={l.id} className="flex items-center justify-between gap-3 border-b border-mosque-ink/5 px-5 py-3.5 last:border-0">
-              <div className="min-w-0">
-                <div className="text-sm font-bold text-mosque-ink">{l.channel.toUpperCase()} · {l.recipient_count} mottagare{l.simulated ? ' · simulerat' : ''}</div>
-                <div className="truncate text-xs text-mosque-ink/50">{l.message}</div>
-              </div>
-              <div className="flex-shrink-0 text-xs text-mosque-ink/40">{new Date(l.created_at).toLocaleString('sv-SE')}</div>
-            </div>
-          ))}
-        </div>
+        {planError && <p role="alert" className="text-sm text-red-700">{planError}</p>}
       </div>
     </div>
   );

@@ -7,16 +7,16 @@ import { cookies } from 'next/headers';
 // (email/password or magic link) for staff login, then seed the admins
 // table with their user ids.
 export async function requireAdmin(req: NextRequest): Promise<NextResponse | null> {
+  const cookieStore = cookies();
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-    {
-      cookies: {
-        getAll: () => cookies().getAll(),
-        // Read-only here: route handlers don't need to refresh cookies.
-        setAll: () => {}
+    { cookies: {
+      getAll: () => cookieStore.getAll(),
+      setAll: (values) => {
+        values.forEach(({ name, value, options }) => cookieStore.set(name, value, options));
       }
-    }
+    } }
   );
 
   const {
@@ -56,4 +56,18 @@ export async function getAdminUser(): Promise<{ id: string; name: string } | nul
   const { data: admin } = await supabase.from('admins').select('user_id, full_name').eq('user_id', user.id).maybeSingle();
   if (!admin) return null;
   return { id: user.id, name: admin.full_name || user.email || 'Admin' };
+}
+
+// Signed in at all (admin or not). Used to tell "not logged in" apart from
+// "logged in but not on the admins allow-list".
+export async function getSessionUser(): Promise<{ id: string; email: string } | null> {
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    { cookies: { getAll: () => cookies().getAll(), setAll: () => {} } }
+  );
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  return user ? { id: user.id, email: user.email ?? '' } : null;
 }

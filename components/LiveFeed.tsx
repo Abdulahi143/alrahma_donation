@@ -2,17 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { supabaseBrowser } from '@/lib/supabase/client';
-import { Donation, Lang } from '@/lib/types';
+import { PublicDonation, Lang } from '@/lib/types';
 import { fmtSEK, timeAgo } from '@/lib/format';
 import { t } from '@/lib/i18n';
 import { CARD } from './PaymentQR';
-
-const METHOD: Record<Donation['method'], string> = {
-  swish: 'Swish',
-  cash: 'Cash',
-  card: 'Card',
-  bank_transfer: 'Bank'
-};
 
 const initials = (name: string) =>
   name
@@ -22,26 +15,22 @@ const initials = (name: string) =>
     .map((w) => w.charAt(0).toUpperCase())
     .join('');
 
-// Subscribes to Supabase Realtime for newly confirmed donations so the
-// tracker updates the instant an admin approves a payment.
-export default function LiveFeed({ lang, initial }: { lang: Lang; initial: Donation[] }) {
-  const [donations, setDonations] = useState<Donation[]>(initial);
+// Refresh only safe display fields; private donation rows are never broadcast.
+export default function LiveFeed({ lang, initial }: { lang: Lang; initial: PublicDonation[] }) {
+  const [donations, setDonations] = useState<PublicDonation[]>(initial);
 
   useEffect(() => {
-    const channel = supabaseBrowser
-      .channel('public:donations')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'donations', filter: 'status=eq.confirmed' },
-        (payload) => {
-          const row = payload.new as Donation;
-          setDonations((prev) => [row, ...prev.filter((d) => d.id !== row.id)].slice(0, 30));
-        }
-      )
-      .subscribe();
+    let active = true;
+    const refresh = async () => {
+      const { data, error } = await supabaseBrowser.from('public_donations')
+        .select('*').order('created_at', { ascending: false }).limit(30);
+      if (active && !error && data) setDonations(data);
+    };
+    const timer = setInterval(refresh, 15000);
 
     return () => {
-      supabaseBrowser.removeChannel(channel);
+      active = false;
+      clearInterval(timer);
     };
   }, []);
 
@@ -74,7 +63,7 @@ export default function LiveFeed({ lang, initial }: { lang: Lang; initial: Donat
             <div className="flex-shrink-0 text-end">
               <div className="text-xl font-bold text-mosque-gold" dir="ltr">{fmtSEK(d.amount_sek)}</div>
               <div className="mt-0.5 text-[11px] text-mosque-cream/50">
-                {timeAgo(d.created_at)} • {METHOD[d.method] ?? d.method}
+                {timeAgo(d.created_at)}
               </div>
             </div>
           </div>

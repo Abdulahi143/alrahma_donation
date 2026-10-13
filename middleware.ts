@@ -9,16 +9,14 @@ export async function middleware(req: NextRequest) {
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
-    {
-      cookies: {
-        getAll: () => req.cookies.getAll(),
-        setAll: (cookiesToSet) => {
-          cookiesToSet.forEach(({ name, value }) => req.cookies.set(name, value));
-          res = NextResponse.next({ request: req });
-          cookiesToSet.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
-        }
+    { cookies: {
+      getAll: () => req.cookies.getAll(),
+      setAll: (values) => {
+        values.forEach(({ name, value }) => req.cookies.set(name, value));
+        res = NextResponse.next({ request: req });
+        values.forEach(({ name, value, options }) => res.cookies.set(name, value, options));
       }
-    }
+    } }
   );
   const {
     data: { user }
@@ -27,7 +25,9 @@ export async function middleware(req: NextRequest) {
   if (!user && !req.nextUrl.pathname.startsWith('/admin/login')) {
     const url = req.nextUrl.clone();
     url.pathname = '/admin/login';
-    return NextResponse.redirect(url);
+    const redirect = NextResponse.redirect(url);
+    res.cookies.getAll().forEach((cookie) => redirect.cookies.set(cookie));
+    return redirect;
   }
 
   return res;

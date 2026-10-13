@@ -1,0 +1,18 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const ts = require('typescript');
+const exportsScope = {};
+new Function('exports', ts.transpileModule(fs.readFileSync('lib/registration-errors.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText)(exportsScope);
+const { registrationIssues, issueText } = exportsScope;
+const valid = { fullName: 'Test Donor', email: 'test@example.com', phone: '', amountSek: 1200, preferredLanguage: 'en', frequency: 'monthly', months: 6, paymentMethod: 'swish', gdprConsent: true, publicDisplayConsent: false, displayMode: 'anonymous', comms: { email: false, sms: false, whatsapp: false, none: true } };
+assert.deepEqual(registrationIssues(valid), []);
+const monthly = registrationIssues({ ...valid, amountSek: 1000 });
+assert.equal(monthly[0].code, 'monthly');
+assert.match(issueText(monthly[0], 'en'), /1000.*6.*996/);
+assert.equal(registrationIssues({ ...valid, displayMode: 'entered' })[0].code, 'publicConsent');
+assert.equal(registrationIssues({ ...valid, comms: { ...valid.comms, sms: true, none: false } })[0].code, 'phone');
+assert.equal(registrationIssues({ ...valid, gdprConsent: false })[0].code, 'consent');
+assert.equal(registrationIssues({ ...valid, amountSek: 1.5 })[0].code, 'amount');
+assert.equal(registrationIssues({ ...valid, email: 'invalid' })[0].code, 'email');
+for (const lang of ['en', 'sv', 'ar']) assert.ok(issueText(monthly[0], lang).includes('996'));
+console.log('Specific registration validation passed.');

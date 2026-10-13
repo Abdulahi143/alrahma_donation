@@ -1,6 +1,6 @@
 'use client';
 
-import { Donation, Lang } from '@/lib/types';
+import { PublicDonation, Lang } from '@/lib/types';
 import PaymentQR, { QrCode } from '@/components/PaymentQR';
 
 import BankTransfer from '@/components/BankTransfer';
@@ -23,7 +23,7 @@ export default function TrackerClient({
 }: {
   goal: number;
   raised: number;
-  initialDonations: Donation[];
+  initialDonations: PublicDonation[];
   subtitle?: string | null;
   isLive: boolean;
   pausedMessage?: string | null;

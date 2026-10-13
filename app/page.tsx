@@ -1,6 +1,7 @@
+import { createClient } from '@supabase/supabase-js';
 import { epcPayload, paypalUrl, qrSvg, swishUrl } from '@/lib/qr';
 
-import { Donation } from '@/lib/types';
+import { PublicDonation } from '@/lib/types';
 import TrackerClient from './TrackerClient';
 import { supabaseAdmin } from '@/lib/supabase/server';
 
@@ -8,7 +9,7 @@ export const revalidate = 0;
 
 // Dev-only preview data so the layout can be reviewed with realistic content.
 // Open /?demo=1 locally; ignored in production builds.
-function demoDonations(): Donation[] {
+function demoDonations(): PublicDonation[] {
   const rows: [string, number, string | null, boolean, number][] = [
     ['Ahmed Hassan', 5000, 'May Allah accept it from us all', false, 2],
     ['Anonymous', 1000, null, true, 11],
@@ -21,31 +22,32 @@ function demoDonations(): Donation[] {
   ];
   return rows.map(([display_name, amount_sek, message, is_anonymous, minsAgo], i) => ({
     id: `demo-${i}`,
-    donor_id: null,
     display_name,
     amount_sek,
-    method: 'swish',
-    status: 'confirmed',
     message,
     is_anonymous,
-    payment_plan_id: null,
     created_at: new Date(Date.now() - minsAgo * 60_000).toISOString()
   }));
 }
 
 export default async function TrackerPage({ searchParams }: { searchParams: { demo?: string } }) {
   const demo = process.env.NODE_ENV !== 'production' && searchParams.demo === '1';
-  const supabase = supabaseAdmin();
+  // Public reads use the publishable key and the public_donations view; only
+  // payment settings need the server key.
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    { auth: { persistSession: false } }
+  );
 
   const [{ data: totals }, { data: donations }, { data: settings }] = await Promise.all([
     supabase.from('campaign_totals').select('*').eq('id', 'main').single(),
     supabase
-      .from('donations')
+      .from('public_donations')
       .select('*')
-      .eq('status', 'confirmed')
       .order('created_at', { ascending: false })
       .limit(20),
-    supabase.from('campaign_settings').select('*').eq('id', 'main').single()
+    supabaseAdmin().from('campaign_settings').select('*').eq('id', 'main').single()
   ]);
 
   const swish = settings?.swish_number ? swishUrl(settings.swish_number) : null;

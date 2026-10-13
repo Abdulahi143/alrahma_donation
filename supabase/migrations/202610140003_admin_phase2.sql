@@ -1,4 +1,4 @@
--- Phase 2: Transaktioner and Löften. Run after phase1.sql. Safe to re-run.
+-- Phase 2: Transaktioner and Löften. Run after 202610140002. Safe to re-run.
 
 -- Who physically received a cash gift (free text, e.g. a volunteer's name).
 -- registered_by (who entered it in the admin) stays the four-eyes anchor.

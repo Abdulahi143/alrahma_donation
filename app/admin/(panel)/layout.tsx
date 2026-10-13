@@ -1,13 +1,18 @@
 import { redirect } from 'next/navigation';
 import AdminNav, { NavGroup } from '@/components/admin/AdminNav';
-import { getAdminUser } from '@/lib/auth';
+import NotAdmin from '@/components/admin/NotAdmin';
+import { getAdminUser, getSessionUser } from '@/lib/auth';
 import { getTodoCounts } from '@/lib/admin/queries';
 
 export const dynamic = 'force-dynamic';
 
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
+  const session = await getSessionUser();
+  if (!session) redirect('/admin/login');
   const user = await getAdminUser();
-  if (!user) redirect('/admin/login');
+  // Signed in but not on the allow-list: say so, instead of bouncing back to
+  // the login page (which looked like "login does nothing").
+  if (!user) return <NotAdmin id={session.id} email={session.email} />;
 
   const todo = await getTodoCounts();
   const groups: NavGroup[] = [

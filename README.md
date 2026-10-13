@@ -10,10 +10,18 @@ visual/interaction reference; this folder is the implementation.
   admin dashboard (`/admin`).
 - **Tailwind CSS** — all styling, using the `mosque-*` color tokens defined in
   `tailwind.config.ts` (emerald/gold palette matching the design).
-- **Supabase** — Postgres database, Row Level Security, Realtime (live feed),
+- **Supabase** — Postgres database, Row Level Security, a restricted public feed,
   and Auth (admin login). See `supabase/*.sql`.
 
 ## Setup
+
+The supplied project URL and publishable key are configured in the ignored
+`.env.local` file. The URL was corrected from `.supabase.coo` to `.supabase.co`.
+To finish the initial database setup, run `supabase/setup.sql` once in your
+Supabase project's SQL Editor (it combines the three scripts below). Then add
+your server-only secret key to `SUPABASE_SECRET_KEY` in `.env.local` and create
+the admin user described below. The publishable key cannot create tables or
+perform the privileged operations used by the registration and admin routes.
 
 1. `npm install`
 2. Create a Supabase project. In the SQL editor, run in order:
@@ -52,10 +60,9 @@ visual/interaction reference; this folder is the implementation.
 
 - The public tracker (`app/page.tsx`) reads `campaign_totals` and recent
   confirmed `donations` server-side on load, then `components/LiveFeed.tsx`
-  subscribes to Supabase Realtime so new confirmed donations (e.g. an admin
-  approving a Swish payment) appear instantly without a refresh.
+  polls the restricted public_donations view every 15 seconds.
 - `components/RegisterForm.tsx` posts to `app/api/register/route.ts`, which
-  upserts the donor, logs consent, and creates either a pending donation or a
+  atomically creates a donor, records separate consents, and creates a pending donation or a
   payment plan depending on the chosen frequency.
 - The admin dashboard (`app/admin/page.tsx`) is a client component that calls
   `/api/admin/*` routes, all gated by `lib/auth.ts`'s `requireAdmin`, which
@@ -108,7 +115,7 @@ UI needs to change.
 - **Purpose limitation**: communication preference (email / SMS / WhatsApp /
   none) is captured and stored per-donor; respect `comm_opt_out` before any
   outreach.
-- **Data minimisation**: the live tracker and its Realtime feed only ever
+- **Data minimisation**: the live tracker and its restricted public feed only ever
   read `donations` (display name + amount + message), never the `donors`
   table — personal data (email, phone) is never sent to the browser.
 - **Right of access / erasure**: the admin Donors tab has an "Erase (GDPR)"
@@ -158,11 +165,15 @@ UI needs to change.
 The new admin lives at `/admin`. The previous single-page admin is kept at
 `/admin/legacy` until its parts (mainly Betalkonton) are rebuilt.
 
-**Set up the database** (Supabase SQL editor, in this order, after
-`schema.sql` and `admins.sql`):
+**Set up the database.** `supabase/migrations/` is the single source of truth.
+Fresh project: run `supabase/setup.sql` once (it contains every migration).
+Existing project: apply only the migration files you haven't run, in filename
+order. The admin rebuild adds:
 
-1. `supabase/phase1.sql` — enums, tables, totals views, RLS, append-only audit log.
-2. `supabase/phase1-seed.sql` — optional example data (2 campaigns, 5 donors,
+1. `202610140001_payment_settings.sql` — bank rows, card link, uploaded QR images, PayPal placeholder.
+2. `202610140002_admin_phase1.sql` — enums, tables, totals views, RLS, append-only audit log.
+3. `202610140003_admin_phase2.sql` — receipt uniqueness, import batches.
+4. `supabase/seed/admin_phase1_example_data.sql` — optional example data (2 campaigns, 5 donors,
    3 pledges, 20 transactions). The file ends with the statements to remove it.
 
 These are new tables. The legacy tables (`donations`, `donors`,
@@ -187,7 +198,7 @@ the same proposal and approval flow.
 for the service role.
 
 **Built in Phase 1:** navigation with badges, Översikt, Kampanjer, Logg.
-**Built in Phase 2** (run `supabase/phase2.sql` after `phase1.sql`): Transaktioner
+**Built in Phase 2** (migration `202610140003`): Transaktioner
 (list with filters, register gift, CSV import with column mapping and
 duplicate/error preview, approve/reject, refund with reason, detail with
 timeline) and Löften (list with derived status, create with editable
