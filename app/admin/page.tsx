@@ -539,6 +539,7 @@ function Settings() {
         swishNumber: settings.swish_number,
         bankgiro: settings.bankgiro,
         iban: settings.iban,
+        paypalLink: settings.paypal_link,
         isLive: settings.is_live,
         pausedMessage: settings.paused_message,
         transparencyFiles: settings.transparency_files
@@ -618,6 +619,10 @@ function Settings() {
               <div className="mb-1.5 text-xs font-bold text-mosque-ink/50">Bankgiro</div>
               <input value={settings.bankgiro} onChange={(e) => setSettings({ ...settings, bankgiro: e.target.value })} className="w-full rounded-lg border border-mosque-ink/15 px-3 py-2 text-sm" />
             </div>
+          </div>
+          <div className="mb-4">
+            <div className="mb-1.5 text-xs font-bold text-mosque-ink/50">PayPal-länk (t.ex. paypal.me/dittnamn) — visas som QR-kod på startsidan</div>
+            <input value={settings.paypal_link ?? ''} onChange={(e) => setSettings({ ...settings, paypal_link: e.target.value })} placeholder="paypal.me/alrahma" className="w-full rounded-lg border border-mosque-ink/15 px-3 py-2 text-sm" />
           </div>
           <div className="mb-4">
             <div className="mb-1.5 text-xs font-bold text-mosque-ink/50">IBAN</div>

@@ -99,6 +99,8 @@ create table if not exists campaign_settings (
   swish_number text not null default '123 456 78 90',
   bankgiro text not null default '5678-1234',
   iban text not null default 'SE45 5000 0000 0583 9825 7466',
+  -- PayPal.Me link or username shown as a QR code on the public front page.
+  paypal_link text not null default '',
   -- Live/paused toggle for the public tracker (admin "Betalkonton" tab).
   -- When false, the tracker shows paused_message instead of the live feed
   -- and registration form.
@@ -114,6 +116,7 @@ create table if not exists campaign_settings (
 insert into campaign_settings (id) values ('main') on conflict do nothing;
 
 -- Migration for existing deployments created before this column set:
+alter table campaign_settings add column if not exists paypal_link text not null default '';
 alter table campaign_settings add column if not exists is_live boolean not null default true;
 alter table campaign_settings add column if not exists paused_message text not null default 'Kampanjen är pausad för tillfället. Tack för ert tålamod — vi är snart tillbaka.';
 alter table campaign_settings add column if not exists transparency_files jsonb not null default '[]'::jsonb;

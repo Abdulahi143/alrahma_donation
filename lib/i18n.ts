@@ -2,6 +2,15 @@ import { Lang } from './types';
 
 export const translations: Record<Lang, Record<string, string>> = {
   en: {
+    giveNow: 'Give now',
+    giveNowSubtitle: 'Scan a code with your phone to donate right away',
+    swish: 'Swish',
+    paypal: 'PayPal',
+    scanSwish: 'Scan with the Swish app',
+    scanPaypal: 'Scan with your camera or PayPal app',
+    becomeMonthly: 'Become a monthly supporter',
+    monthlyHint: 'Prefer a recurring gift? Register a monthly plan.',
+    backHome: '← Back to tracker',
     mosqueName: 'Al-Rahma Mosque',
     raisedLabel: 'Raised so far',
     goalLabel: 'Goal',
@@ -22,6 +31,15 @@ export const translations: Record<Lang, Record<string, string>> = {
     thankYou: 'Thank you! We’ve received your registration.'
   },
   sv: {
+    giveNow: 'Ge nu',
+    giveNowSubtitle: 'Skanna en kod med mobilen för att donera direkt',
+    swish: 'Swish',
+    paypal: 'PayPal',
+    scanSwish: 'Skanna med Swish-appen',
+    scanPaypal: 'Skanna med kameran eller PayPal-appen',
+    becomeMonthly: 'Bli månadsgivare',
+    monthlyHint: 'Föredrar du ett återkommande bidrag? Registrera en månadsplan.',
+    backHome: '← Tillbaka till insamlingen',
     mosqueName: 'Al-Rahma Moské',
     raisedLabel: 'Insamlat hittills',
     goalLabel: 'Mål',
@@ -42,6 +60,15 @@ export const translations: Record<Lang, Record<string, string>> = {
     thankYou: 'Tack! Vi har tagit emot din registrering.'
   },
   ar: {
+    giveNow: 'تبرع الآن',
+    giveNowSubtitle: 'امسح الرمز بهاتفك للتبرع مباشرة',
+    swish: 'Swish',
+    paypal: 'PayPal',
+    scanSwish: 'امسح عبر تطبيق Swish',
+    scanPaypal: 'امسح بالكاميرا أو تطبيق PayPal',
+    becomeMonthly: 'كن داعمًا شهريًا',
+    monthlyHint: 'تفضّل تبرعًا متكررًا؟ سجّل خطة شهرية.',
+    backHome: '← العودة إلى الحملة',
     mosqueName: 'مسجد الرحمة',
     raisedLabel: 'تم جمعه',
     goalLabel: 'الهدف',

@@ -6,7 +6,7 @@ import { t } from '@/lib/i18n';
 import LanguageDropdown from '@/components/LanguageDropdown';
 import ProgressCard from '@/components/ProgressCard';
 import LiveFeed from '@/components/LiveFeed';
-import RegisterForm from '@/components/RegisterForm';
+import PaymentQR, { QrCode } from '@/components/PaymentQR';
 
 // Client shell: owns the language toggle and composes the server-fetched
 // totals/donations into the tracker layout.
@@ -17,7 +17,7 @@ export default function TrackerClient({
   subtitle,
   isLive,
   pausedMessage,
-  transparencyFiles
+  qrCodes
 }: {
   goal: number;
   raised: number;
@@ -25,7 +25,7 @@ export default function TrackerClient({
   subtitle?: string | null;
   isLive: boolean;
   pausedMessage?: string | null;
-  transparencyFiles: TransparencyFile[];
+  qrCodes: { swish?: QrCode; paypal?: QrCode };
 }) {
   const [lang, setLang] = useState<Lang>('en');
   const dir = lang === 'ar' ? 'rtl' : 'ltr';
@@ -53,8 +53,19 @@ export default function TrackerClient({
 
         {isLive ? (
           <>
+            <PaymentQR lang={lang} codes={qrCodes} />
+
+            <div className="my-6 flex flex-col items-center gap-2 text-center">
+              <a
+                href={`/supporter?lang=${lang}`}
+                className="rounded-xl bg-mosque-gold px-8 py-3.5 text-base font-extrabold text-mosque-deep shadow-lg transition hover:brightness-110"
+              >
+                {t(lang, 'becomeMonthly')}
+              </a>
+              <div className="text-[13px] text-mosque-mint/60">{t(lang, 'monthlyHint')}</div>
+            </div>
+
             <LiveFeed lang={lang} initial={initialDonations} />
-            <RegisterForm lang={lang} transparencyFiles={transparencyFiles} />
           </>
         ) : (
           <div className="mt-6 rounded-[20px] border border-white/10 bg-white/5 p-8 text-center backdrop-blur">
