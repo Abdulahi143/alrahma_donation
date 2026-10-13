@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { swishUrl, paypalUrl, qrSvg } from '@/lib/qr';
+import { supabaseAdmin } from '@/lib/supabase/server';
 import TrackerClient from './TrackerClient';
 
 export const revalidate = 0; // always fetch fresh totals
@@ -18,7 +19,7 @@ export default async function TrackerPage() {
       .select('*')
       .order('created_at', { ascending: false })
       .limit(20),
-    supabase.from('campaign_settings').select('*').eq('id', 'main').single()
+    supabaseAdmin().from('campaign_settings').select('*').eq('id', 'main').single()
   ]);
 
   const swish = settings?.swish_number ? swishUrl(settings.swish_number) : null;

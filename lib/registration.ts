@@ -1,5 +1,6 @@
 import { Lang } from './types';
 import { t } from './i18n';
+import { registrationIssues } from './registration-errors';
 
 export const formText: Record<Lang, Record<string, string>> = {
   en: {
@@ -41,23 +42,8 @@ export const formText: Record<Lang, Record<string, string>> = {
 };
 
 export function validateRegistration(input: unknown) {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  if (registrationIssues(input).length) return null;
   const b = input as Record<string, any>;
-  if (typeof b.fullName !== 'string' || !b.fullName.trim() || b.fullName.length > 120 ||
-      typeof b.email !== 'string' || b.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(b.email.trim()) ||
-      typeof b.phone !== 'string' || b.phone.length > 30 ||
-      !Number.isInteger(b.amountSek) || b.amountSek < 1 || b.amountSek > 10000000 ||
-      !['en', 'sv', 'ar'].includes(b.preferredLanguage) ||
-      !['onetime', 'monthly'].includes(b.frequency) ||
-      !['swish', 'bank_transfer'].includes(b.paymentMethod) ||
-      b.gdprConsent !== true || typeof b.publicDisplayConsent !== 'boolean' ||
-      !b.comms || ['email', 'sms', 'whatsapp', 'none'].some(k => typeof b.comms[k] !== 'boolean')) return null;
-  if (b.comms.none && (b.comms.email || b.comms.sms || b.comms.whatsapp)) return null;
-  if ((b.comms.sms || b.comms.whatsapp) && !/^\+?[\d\s()-]{6,30}$/.test(b.phone.trim())) return null;
-  if (b.frequency === 'monthly' && (![2, 6, 12].includes(b.months) || b.amountSek % b.months !== 0)) return null;
-  if (!['anonymous', 'entered', 'custom'].includes(b.displayMode)) return null;
-  if (b.displayMode !== 'anonymous' && b.publicDisplayConsent !== true) return null;
-  if (b.displayMode === 'custom' && (typeof b.displayName !== 'string' || !b.displayName.trim() || b.displayName.trim().length > 80)) return null;
   const lang = b.preferredLanguage as Lang;
   return {
     fullName: b.fullName.trim(), email: b.email.trim().toLowerCase(), phone: b.phone.trim(),

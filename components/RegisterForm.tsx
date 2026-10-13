@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { Lang, CommPref, TransparencyFile } from '@/lib/types';
 import { t } from '@/lib/i18n';
-import { formText, validateRegistration } from '@/lib/registration';
+import { formText } from '@/lib/registration';
+import { registrationIssues, issueText, RegistrationIssue } from '@/lib/registration-errors';
 
 // Registration + GDPR consent capture. Submits to /api/register, which
 // writes the donor, the pending donation/plan, and an immutable consent_log
@@ -30,6 +31,7 @@ export default function RegisterForm({ lang, transparencyFiles }: { lang: Lang; 
   const text = formText[lang];
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [issues, setIssues] = useState<RegistrationIssue[]>([]);
   const [loading, setLoading] = useState(false);
 
   const toggleComm = (key: CommPref) => {
@@ -40,18 +42,20 @@ export default function RegisterForm({ lang, transparencyFiles }: { lang: Lang; 
     }
   };
 
-  const disabled = !name || !email || !amount || !consent || loading;
+  const disabled = loading;
 
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (loading) return;
     setError(null);
+    setIssues([]);
     const payload = {
       fullName: name, email, phone, amountSek: Number(amount), preferredLanguage: lang,
       frequency, months: frequency === 'monthly' ? months : null, comms,
       gdprConsent: consent, publicDisplayConsent, paymentMethod, displayMode, displayName
     };
-    if (!validateRegistration(payload)) { setError(text.invalid); return; }
+    const problems = registrationIssues(payload);
+    if (problems.length) { setIssues(problems); return; }
     setLoading(true);
     try {
       const res = await fetch('/api/register', {
@@ -60,7 +64,11 @@ export default function RegisterForm({ lang, transparencyFiles }: { lang: Lang; 
         body: JSON.stringify(payload)
       });
       const result = await res.json();
-      if (!res.ok) { setError(text[result.error] || text.failed); return; }
+      if (!res.ok) {
+        if (result.error === 'invalid' && Array.isArray(result.issues) && result.issues.length) setIssues(result.issues);
+        else setError(text[result.error] || text.failed);
+        return;
+      }
       setReference(result.reference);
       setSubmitted(true);
     } catch (e) {
@@ -107,7 +115,7 @@ export default function RegisterForm({ lang, transparencyFiles }: { lang: Lang; 
   }
 
   return (
-    <form onSubmit={submit} className="mt-6 rounded-[20px] border border-white/10 bg-white/5 p-7 backdrop-blur">
+    <form noValidate onSubmit={submit} className="mt-6 rounded-[20px] border border-white/10 bg-white/5 p-7 backdrop-blur">
       <div className="mb-1 text-lg font-extrabold">{t(lang, 'registerTitle')}</div>
       <div className="mb-5 text-[13px] text-mosque-mint/70">{t(lang, 'registerSubtitle')}</div>
 
@@ -223,6 +231,7 @@ export default function RegisterForm({ lang, transparencyFiles }: { lang: Lang; 
       </label>}
 
       {error && <div role="alert" className="mb-3 text-sm font-semibold text-red-300">{error}</div>}
+      {issues.length > 0 && <ul role="alert" className="mb-4 list-disc space-y-2 rounded-xl border border-red-300/30 bg-red-500/10 py-4 pl-8 pr-4 text-sm text-red-200">{issues.map((issue, index) => <li key={`${issue.field}-${index}`}>{issueText(issue, lang)}</li>)}</ul>}
 
       <button
         type="submit"

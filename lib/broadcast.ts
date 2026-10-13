@@ -1,6 +1,6 @@
 import { Channel } from './communication';
 
-type Result = { ok: boolean; simulated: false; error?: string };
+type Result = { ok: boolean; simulated: false; error?: string; messageId?: string };
 export function providerStatus(): Record<Channel, boolean> {
   const e = process.env;
   return {
@@ -12,7 +12,11 @@ export function providerStatus(): Record<Channel, boolean> {
 async function deliver(url: string, init: RequestInit): Promise<Result> {
   try {
     const response = await fetch(url, { ...init, signal: AbortSignal.timeout(15000) });
-    return { ok: response.ok, simulated: false, ...(response.ok ? {} : { error: `Provider HTTP ${response.status}` }) };
+    let messageId: string | undefined;
+    if (response.ok && url.includes('graph.facebook.com')) {
+      try { const data = await response.json(); messageId = data.messages?.[0]?.id; } catch {}
+    }
+    return { ok: response.ok, simulated: false, ...(messageId ? { messageId } : {}), ...(response.ok ? {} : { error: `Provider HTTP ${response.status}` }) };
   } catch { return { ok: false, simulated: false, error: 'Provider connection failed' }; }
 }
 export async function sendSms(to: string, body: string): Promise<Result> {
@@ -32,11 +36,11 @@ export async function sendEmail(to: string, subject: string, body: string): Prom
     body: JSON.stringify({ from: process.env.BROADCAST_FROM_EMAIL, to, subject, text: body })
   });
 }
-export async function sendWhatsApp(to: string, template: string, language: string): Promise<Result> {
+export async function sendWhatsApp(to: string, template: string, language: string, parameters: string[] = []): Promise<Result> {
   if (!providerStatus().whatsapp) return { ok: false, simulated: false, error: 'WhatsApp is not enabled' };
   const e = process.env;
   return deliver(`https://graph.facebook.com/${e.WHATSAPP_API_VERSION}/${e.WHATSAPP_PHONE_NUMBER_ID}/messages`, {
     method: 'POST', headers: { Authorization: `Bearer ${e.WHATSAPP_ACCESS_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messaging_product: 'whatsapp', to: to.replace(/^\+/, ''), type: 'template', template: { name: template, language: { code: language } } })
+    body: JSON.stringify({ messaging_product: 'whatsapp', to: to.replace(/^\+/, ''), type: 'template', template: { name: template, language: { code: language }, ...(parameters.length ? { components: [{ type: 'body', parameters: parameters.map(text => ({ type: 'text', text })) }] } : {}) } })
   });
 }

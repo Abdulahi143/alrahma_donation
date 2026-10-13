@@ -33,11 +33,19 @@ New eligible pledges and verified payments create queue entries transactionally.
 
 Admin > WhatsApp-aviseringar shows previews and logs. Queue reminders is an explicit admin action for pending one-time pledges older than 7 days; at most one reminder is created per pledge. Monthly installment reminders require due dates and are deferred.
 
-Sending is disabled in code. Nothing claims successful delivery. Meta-approved templates, a sending worker with a fresh consent/status check, provider credentials and verified delivery webhooks are the next integration step. Draft messages need the organisation's review and an opt-out/contact mechanism before submission to Meta.
+Sending is disabled by default through environment flags. The sender rechecks consent and payment status, claims queued rows, and stores provider message IDs. The signed webhook records delivery separately from provider acceptance. See DEPLOYMENT_HANDOFF.md for the remaining hosting, database, Meta template approval and scheduling steps.
 
 Tests: `supabase/tests/notifications.sql` runs fixture assertions in a rolled-back transaction, without sending messages or retaining test donor data.
 
 ## Utskick: SMS, email and WhatsApp
+
+### Delivery webhook setup (developer only)
+
+Apply `202610130002_whatsapp_delivery.sql`. Set `META_APP_SECRET`, `WHATSAPP_WEBHOOK_VERIFY_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID` on the server. Configure Meta with the public HTTPS URL `/api/whatsapp/webhook` and subscribe to `messages`. Localhost is not accessible to Meta. App publishing and Meta's account requirements must be completed for production callbacks.
+
+The endpoint verifies Meta's HMAC signature, filters by the configured sender number ID, and stores only delivery status and provider message IDs. Duplicate events are ignored. The admin sees Swedish delivery labels; credentials and callback configuration are not exposed in the dashboard. A test sender keeps Meta's test identity; use a dedicated, verified mosque number for the Masjid Al Rahma production identity. The automatic queue sender is implemented and remains disabled by default pending approved templates and provider setup. Current reminders cover one-time pledges, not monthly installments.
+
+Test: `node tests/whatsapp-webhook.cjs` (no messages sent).
 
 Utskick now uses a separate BroadcastPanel, provider adapters in lib/broadcast.ts and shared contact eligibility in lib/communication.ts. Missing provider credentials block sending; there are no simulated successes. Provider acceptance is recorded separately from delivery, which requires future delivery callbacks.
 
