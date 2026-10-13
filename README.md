@@ -159,3 +159,56 @@ UI needs to change.
 - The public register form (`/api/register`) validates email format and
   donation amount server-side (not just in the browser) before writing to
   the database.
+
+## Admin rebuild — Phase 1
+
+The new admin lives at `/admin`. The previous single-page admin is kept at
+`/admin/legacy` until its parts (mainly Betalkonton) are rebuilt.
+
+**Set up the database.** `supabase/migrations/` is the single source of truth.
+Fresh project: run `supabase/setup.sql` once (it contains every migration).
+Existing project: apply only the migration files you haven't run, in filename
+order. The admin rebuild adds:
+
+1. `202610140001_payment_settings.sql` — bank rows, card link, uploaded QR images, PayPal placeholder.
+2. `202610140002_admin_phase1.sql` — enums, tables, totals views, RLS, append-only audit log.
+3. `202610140003_admin_phase2.sql` — receipt uniqueness, import batches.
+4. `supabase/seed/admin_phase1_example_data.sql` — optional example data (2 campaigns, 5 donors,
+   3 pledges, 20 transactions). The file ends with the statements to remove it.
+
+These are new tables. The legacy tables (`donations`, `donors`,
+`payment_plans`, `campaign_settings`) are untouched and still power the public
+tracker.
+
+**Who can do what.** There are no roles yet: anyone with a row in `admins` is
+a full admin. Roles come later.
+
+**Four-eyes rule (built into the data model, used from Phase 2).** A manual or
+imported transaction starts as `awaiting_approval` and counts toward no total.
+Another admin must approve it. The database enforces this: a confirmed
+cash/bank/import row must have `approved_by` set, and `approved_by` can never
+equal `registered_by`. Payment-account changes (Betalsätt, Phase 4) will use
+the same proposal and approval flow.
+
+**Totals are never typed in.** `campaign_stats` and `installment_balances`
+(views) add up confirmed transactions and unpaid pledge instalments.
+
+**Audit log.** Every server action that changes data calls `writeAudit()`
+(`lib/admin/audit.ts`). `audit_log` rejects UPDATE, DELETE and TRUNCATE, even
+for the service role.
+
+**Built in Phase 1:** navigation with badges, Översikt, Kampanjer, Logg.
+**Built in Phase 2** (migration `202610140003`): Transaktioner
+(list with filters, register gift, CSV import with column mapping and
+duplicate/error preview, approve/reject, refund with reason, detail with
+timeline) and Löften (list with derived status, create with editable
+instalment schedule, instalments / payments / settings tabs, cancel with
+reason, copy a prefilled donate link).
+**Coming:** Givare, Utskick, Rapporter (Phase 3), Betalsätt with approvals
+(Phase 4), Eventläge (Phase 5).
+
+**Known Phase 2 limits.** A payment is linked to one instalment; an overpayment
+does not spill into later instalments. "Kontrollera status igen" needs a payment
+provider connection and is not available yet. The prefilled donate link
+(`/?kampanj=…&belopp=…&lofte=…`) is not read by the public page yet. Pledge
+reminders and sending links by SMS/e-post wait for Utskick.

@@ -63,10 +63,21 @@ export interface CampaignSettings {
   bankgiro: string;
   iban: string;
   paypal_link: string;
+  paypal_placeholder: boolean;
+  plusgiro: string;
+  bank_name: string;
+  account_holder: string;
+  account_number: string;
+  bic: string;
+  card_link: string;
+  swish_qr_url: string;
+  paypal_qr_url: string;
   is_live: boolean;
   paused_message: string;
   transparency_files: TransparencyFile[];
   updated_at: string;
+  // joined from campaign_totals by /api/admin/settings
+  goal_sek?: number;
 }
 
 export interface BroadcastLogEntry {

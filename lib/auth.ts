@@ -39,3 +39,35 @@ export async function requireAdmin(req: NextRequest): Promise<NextResponse | nul
 
   return null;
 }
+
+// For server components and server actions (no NextRequest available).
+// Returns the signed-in admin, or null if not signed in / not on the allow-list.
+export async function getAdminUser(): Promise<{ id: string; name: string } | null> {
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    { cookies: { getAll: () => cookies().getAll(), setAll: () => {} } }
+  );
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: admin } = await supabase.from('admins').select('user_id, full_name').eq('user_id', user.id).maybeSingle();
+  if (!admin) return null;
+  return { id: user.id, name: admin.full_name || user.email || 'Admin' };
+}
+
+// Signed in at all (admin or not). Used to tell "not logged in" apart from
+// "logged in but not on the admins allow-list".
+export async function getSessionUser(): Promise<{ id: string; email: string } | null> {
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!,
+    { cookies: { getAll: () => cookies().getAll(), setAll: () => {} } }
+  );
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  return user ? { id: user.id, email: user.email ?? '' } : null;
+}
