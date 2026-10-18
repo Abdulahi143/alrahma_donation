@@ -98,12 +98,13 @@ perform the privileged operations used by the registration and admin routes.
 
 ## Wiring a real SMS/email provider
 
-`lib/broadcast.ts` has `sendSms`/`sendEmail` functions that no-op (return
-`simulated: true`) until you set the matching env vars from `.env.example`:
-Twilio (`TWILIO_ACCOUNT_SID`/`TWILIO_AUTH_TOKEN`/`TWILIO_FROM_NUMBER`) for
-SMS, Resend (`RESEND_API_KEY`) for email. Swap in a different provider by
-editing just those two functions — nothing else in the broadcast route or
-UI needs to change.
+`lib/broadcast.ts` sends SMS through 46elks when `ELKS_API_USERNAME`,
+`ELKS_API_PASSWORD` and `ELKS_FROM` are set in the server environment.
+Keep the credentials private. `ELKS_FROM=AlRahma` uses a sender name, so
+recipients cannot reply by SMS. Email uses Resend (`RESEND_API_KEY` and
+`BROADCAST_FROM_EMAIL`). Utskick sends only to donors who selected the
+channel and have valid contact details; test with one consenting recipient
+before selecting a group.
 
 ## GDPR
 
