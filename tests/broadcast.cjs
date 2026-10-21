@@ -4,17 +4,28 @@ const ts = require('typescript');
 function load(name) {
   const mod = { exports: {} };
   const code = ts.transpileModule(fs.readFileSync(`lib/${name}.ts`, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-  new Function('require','exports','module',code)(require,mod.exports,mod);
+  new Function('require','exports','module',code)(id => id === './communication' ? load('communication') : require(id),mod.exports,mod);
   return mod.exports;
 }
 const { recipientAddress } = load('communication');
 const { providerStatus, sendSms, sendEmail, sendWhatsApp } = load('broadcast');
+const { profileRecipients, suppressOptedOutPhones } = load('broadcast-recipients');
 const donor = { email:' USER@EXAMPLE.COM ',phone:'0046 70 000 00 00',comm_email:true,comm_sms:true,comm_whatsapp:true,comm_opt_out:false };
 assert.equal(recipientAddress(donor,'sms'),'+46700000000');
 assert.equal(recipientAddress(donor,'email'),'user@example.com');
 assert.equal(recipientAddress({...donor,comm_opt_out:true},'whatsapp'),null);
 assert.equal(recipientAddress({...donor,comm_sms:false},'sms'),null);
 assert.equal(recipientAddress({...donor,phone:'0700000000'},'sms'),null);
+const profile = {id:'profile-1',full_name:'Test Donor',phone:'+46700000000',email:null};
+const consent = (id,purpose,granted,created_at) => ({id,donor_id:'profile-1',purpose,granted,created_at});
+const profileRows = profileRecipients([profile],[
+  consent('a','storage',true,'2026-01-01'), consent('b','contact_sms',true,'2026-01-01'),
+  consent('c','contact_sms',false,'2026-02-01')
+]);
+assert.equal(profileRows[0].comm_sms,false);
+assert.equal(profileRecipients([profile],[consent('a','contact_sms',true,'2026-01-01')]).length,0);
+assert.equal(suppressOptedOutPhones([{...profileRows[0],comm_sms:true}, {...profileRows[0],id:'legacy:other',comm_opt_out:true}])[0].comm_sms,false);
+assert.equal(suppressOptedOutPhones([{...donor,id:'legacy:other',full_name:'Old donor',preferred_language:'sv'}, profileRows[0]])[0].comm_sms,false);
 let calls=[];
 global.fetch=async(url,options)=>{calls.push({url,options});return {ok:true,status:202,json:async()=>({id:'sms-test-id',messages:[{id:'wa-test-id'}]})};};
 (async()=>{
