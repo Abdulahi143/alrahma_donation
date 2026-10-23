@@ -4,27 +4,41 @@ const ts = require('typescript');
 function load(name) {
   const mod = { exports: {} };
   const code = ts.transpileModule(fs.readFileSync(`lib/${name}.ts`, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-  new Function('require','exports','module',code)(require,mod.exports,mod);
+  new Function('require','exports','module',code)(id => id === './communication' ? load('communication') : require(id),mod.exports,mod);
   return mod.exports;
 }
 const { recipientAddress } = load('communication');
 const { providerStatus, sendSms, sendEmail, sendWhatsApp } = load('broadcast');
+const { profileRecipients, suppressOptedOutPhones } = load('broadcast-recipients');
 const donor = { email:' USER@EXAMPLE.COM ',phone:'0046 70 000 00 00',comm_email:true,comm_sms:true,comm_whatsapp:true,comm_opt_out:false };
 assert.equal(recipientAddress(donor,'sms'),'+46700000000');
 assert.equal(recipientAddress(donor,'email'),'user@example.com');
 assert.equal(recipientAddress({...donor,comm_opt_out:true},'whatsapp'),null);
 assert.equal(recipientAddress({...donor,comm_sms:false},'sms'),null);
 assert.equal(recipientAddress({...donor,phone:'0700000000'},'sms'),null);
+const profile = {id:'profile-1',full_name:'Test Donor',phone:'+46700000000',email:null};
+const consent = (id,purpose,granted,created_at) => ({id,donor_id:'profile-1',purpose,granted,created_at});
+const profileRows = profileRecipients([profile],[
+  consent('a','storage',true,'2026-01-01'), consent('b','contact_sms',true,'2026-01-01'),
+  consent('c','contact_sms',false,'2026-02-01')
+]);
+assert.equal(profileRows[0].comm_sms,false);
+assert.equal(profileRecipients([profile],[consent('a','contact_sms',true,'2026-01-01')]).length,0);
+assert.equal(suppressOptedOutPhones([{...profileRows[0],comm_sms:true}, {...profileRows[0],id:'legacy:other',comm_opt_out:true}])[0].comm_sms,false);
+assert.equal(suppressOptedOutPhones([{...donor,id:'legacy:other',full_name:'Old donor',preferred_language:'sv'}, profileRows[0]])[0].comm_sms,false);
 let calls=[];
-global.fetch=async(url,options)=>{calls.push({url,options});return {ok:true,status:202};};
+global.fetch=async(url,options)=>{calls.push({url,options});return {ok:true,status:202,json:async()=>({id:'sms-test-id',messages:[{id:'wa-test-id'}]})};};
 (async()=>{
-  for(const key of ['TWILIO_ACCOUNT_SID','TWILIO_AUTH_TOKEN','TWILIO_FROM_NUMBER','RESEND_API_KEY','BROADCAST_FROM_EMAIL','WHATSAPP_ENABLED']) delete process.env[key];
+  for(const key of ['ELKS_API_USERNAME','ELKS_API_PASSWORD','ELKS_FROM','RESEND_API_KEY','BROADCAST_FROM_EMAIL','WHATSAPP_ENABLED']) delete process.env[key];
   assert.equal((await sendSms('+46700000000','test')).ok,false);
   assert.equal((await sendEmail('a@example.invalid','test','test')).ok,false);
   assert.equal((await sendWhatsApp('+46700000000','test','sv')).ok,false);
   assert.equal(calls.length,0);
-  Object.assign(process.env,{TWILIO_ACCOUNT_SID:'test',TWILIO_AUTH_TOKEN:'test',TWILIO_FROM_NUMBER:'+46700000001',RESEND_API_KEY:'test',BROADCAST_FROM_EMAIL:'test@example.invalid',WHATSAPP_ENABLED:'true',WHATSAPP_ACCESS_TOKEN:'test',WHATSAPP_PHONE_NUMBER_ID:'123',WHATSAPP_API_VERSION:'vTest'});
-  assert.equal((await sendSms('+46700000000','test')).ok,true);
+  Object.assign(process.env,{ELKS_API_USERNAME:'test-user',ELKS_API_PASSWORD:'test-password',ELKS_FROM:'AlRahma',RESEND_API_KEY:'test',BROADCAST_FROM_EMAIL:'test@example.invalid',WHATSAPP_ENABLED:'true',WHATSAPP_ACCESS_TOKEN:'test',WHATSAPP_PHONE_NUMBER_ID:'123',WHATSAPP_API_VERSION:'vTest'});
+  assert.deepEqual(await sendSms('+46700000000','test'),{ok:true,simulated:false,messageId:'sms-test-id'});
+  assert.equal(calls[0].url,'https://api.46elks.com/a1/sms');
+  assert.equal(calls[0].options.headers.Authorization,`Basic ${Buffer.from('test-user:test-password').toString('base64')}`);
+  assert.equal(calls[0].options.body.toString(),'to=%2B46700000000&from=AlRahma&message=test');
   assert.equal((await sendEmail('a@example.invalid','test','test')).ok,true);
   assert.equal((await sendWhatsApp('+46700000000','approved_template','sv')).ok,true);
   assert.equal(JSON.parse(calls[2].options.body).template.name,'approved_template');

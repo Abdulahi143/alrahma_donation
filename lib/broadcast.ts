@@ -4,7 +4,7 @@ type Result = { ok: boolean; simulated: false; error?: string; messageId?: strin
 export function providerStatus(): Record<Channel, boolean> {
   const e = process.env;
   return {
-    sms: !!(e.TWILIO_ACCOUNT_SID && e.TWILIO_AUTH_TOKEN && e.TWILIO_FROM_NUMBER),
+    sms: !!(e.ELKS_API_USERNAME && e.ELKS_API_PASSWORD && e.ELKS_FROM),
     email: !!(e.RESEND_API_KEY && e.BROADCAST_FROM_EMAIL),
     whatsapp: e.WHATSAPP_ENABLED === 'true' && !!(e.WHATSAPP_ACCESS_TOKEN && e.WHATSAPP_PHONE_NUMBER_ID && e.WHATSAPP_API_VERSION)
   };
@@ -13,8 +13,8 @@ async function deliver(url: string, init: RequestInit): Promise<Result> {
   try {
     const response = await fetch(url, { ...init, signal: AbortSignal.timeout(15000) });
     let messageId: string | undefined;
-    if (response.ok && url.includes('graph.facebook.com')) {
-      try { const data = await response.json(); messageId = data.messages?.[0]?.id; } catch {}
+    if (response.ok && (url.includes('graph.facebook.com') || url.includes('api.46elks.com'))) {
+      try { const data = await response.json(); messageId = url.includes('graph.facebook.com') ? data.messages?.[0]?.id : data.id; } catch {}
     }
     return { ok: response.ok, simulated: false, ...(messageId ? { messageId } : {}), ...(response.ok ? {} : { error: `Provider HTTP ${response.status}` }) };
   } catch { return { ok: false, simulated: false, error: 'Provider connection failed' }; }
@@ -22,11 +22,11 @@ async function deliver(url: string, init: RequestInit): Promise<Result> {
 export async function sendSms(to: string, body: string): Promise<Result> {
   if (!providerStatus().sms) return { ok: false, simulated: false, error: 'SMS provider is not configured' };
   const e = process.env;
-  return deliver(`https://api.twilio.com/2010-04-01/Accounts/${e.TWILIO_ACCOUNT_SID}/Messages.json`, {
+  return deliver('https://api.46elks.com/a1/sms', {
     method: 'POST', headers: {
-      Authorization: `Basic ${Buffer.from(`${e.TWILIO_ACCOUNT_SID}:${e.TWILIO_AUTH_TOKEN}`).toString('base64')}`,
+      Authorization: `Basic ${Buffer.from(`${e.ELKS_API_USERNAME}:${e.ELKS_API_PASSWORD}`).toString('base64')}`,
       'Content-Type': 'application/x-www-form-urlencoded'
-    }, body: new URLSearchParams({ To: to, From: e.TWILIO_FROM_NUMBER!, Body: body })
+    }, body: new URLSearchParams({ to, from: e.ELKS_FROM!, message: body })
   });
 }
 export async function sendEmail(to: string, subject: string, body: string): Promise<Result> {
