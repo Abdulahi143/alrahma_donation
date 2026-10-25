@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { BroadcastLogEntry } from '@/lib/types';
 import type { BroadcastRecipient } from '@/lib/broadcast-recipients';
-import { Channel, recipientAddress } from '@/lib/communication';
+import { Channel, isSwedishSmsAddress, recipientAddress } from '@/lib/communication';
 
 type Template = { id: string; language: string; body: string };
 const labels: Record<Channel, string> = { sms: 'SMS', email: 'E-post', whatsapp: 'WhatsApp' };
@@ -26,7 +26,14 @@ export default function BroadcastPanel() {
 
   const template = templates.find(t => `${t.id}:${t.language}` === templateKey);
   const group = recipients.filter(r => !r.comm_opt_out && r[`comm_${channel}`]);
-  const eligible = group.filter(r => recipientAddress(r, channel) && (channel !== 'whatsapp' || !template || r.preferred_language === template.language));
+  const eligible = group.filter(r => {
+    const address = recipientAddress(r, channel);
+    return address && (channel !== 'sms' || isSwedishSmsAddress(address)) && (channel !== 'whatsapp' || !template || r.preferred_language === template.language);
+  });
+  const excludedNonSwedish = channel === 'sms' ? group.filter(r => {
+    const address = recipientAddress(r, 'sms');
+    return address && !isSwedishSmsAddress(address);
+  }).length : 0;
   const visible = group.filter(r => `${r.full_name} ${r.phone || ''} ${r.email}`.toLowerCase().includes(search.toLowerCase()));
   const chosen = eligible.filter(r => selected.includes(r.id));
   const reach = new Set(chosen.map(r => recipientAddress(r, channel))).size;
@@ -56,7 +63,7 @@ export default function BroadcastPanel() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Utskicket misslyckades.');
-      setNotice(`${result.accepted} accepterade, ${result.failed} misslyckade eller okända. Leverans är ännu inte bekräftad.${result.auditWarning ? ' Loggen kunde inte uppdateras; kontrollera 46elks.' : ''}`);
+      setNotice(`${result.accepted} accepterade, ${result.failed} misslyckade eller okända.${result.excludedNonSwedish ? ` ${result.excludedNonSwedish} utländska nummer uteslöts.` : ''} Leverans är ännu inte bekräftad.${result.auditWarning ? ' Loggen kunde inte uppdateras; kontrollera 46elks.' : ''}`);
       setBatchId(null); setSelected([]); setMessage('');
       try { await load(); } catch { setNotice('Utskicket behandlades. Historiken kunde inte uppdateras här; kontrollera 46elks.'); }
     } catch (error) {
@@ -74,10 +81,11 @@ export default function BroadcastPanel() {
 
     <div className="flex flex-wrap gap-2">{(Object.keys(labels) as Channel[]).map(key =>
       <button key={key} type="button" disabled={busy || !!batchId} aria-pressed={key === channel} onClick={() => { setChannel(key); setSelected([]); setNotice(''); }} className={`rounded-lg px-4 py-2 text-sm font-bold ${key === channel ? 'bg-mosque-emerald text-white' : 'bg-white'}`}>
-        {labels[key]} ({recipients.filter(r => !r.comm_opt_out && r[`comm_${key}`]).length})
+        {labels[key]} ({recipients.filter(r => !r.comm_opt_out && r[`comm_${key}`] && (key !== 'sms' || isSwedishSmsAddress(recipientAddress(r, 'sms')))).length})
       </button>)}</div>
 
     <p className="text-sm">{providers[channel] ? channel === 'sms' ? '46elks är anslutet. Kontrollera saldo hos 46elks före större utskick.' : 'Leverantören är konfigurerad.' : channel === 'whatsapp' ? 'WhatsApp väntar på Meta-godkännande och API-inställningar.' : `${labels[channel]} behöver en konfigurerad leverantör.`}</p>
+    {channel === 'sms' && <p className="rounded-lg bg-white p-3 text-sm"><strong>Endast Sverige (+46).</strong> Nummer utanför Sverige kan inte väljas eller skickas till här. {excludedNonSwedish} givare med utländska nummer är uteslutna.</p>}
 
     {channel === 'whatsapp' ? <div className="space-y-2">
       <label className="block text-sm font-bold">Godkänd WhatsApp-mall
@@ -90,14 +98,14 @@ export default function BroadcastPanel() {
     </label>}
 
     <div className="rounded-xl bg-white p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2"><strong>{labels[channel]}-gruppen ({group.length}) · Valda nummer ({reach})</strong>
+      <div className="flex flex-wrap items-center justify-between gap-2"><strong>{labels[channel]}-gruppen ({eligible.length}) · Valda {channel === 'email' ? 'adresser' : 'nummer'} ({reach})</strong>
         <div className="flex gap-3 text-sm"><button type="button" disabled={busy || !!batchId} onClick={() => setSelected(eligible.filter(r => visible.includes(r)).slice(0, 50).map(r => r.id))} className="text-mosque-emerald underline">Markera upp till 50</button><button type="button" disabled={busy || !!batchId} onClick={() => setSelected([])} className="underline">Rensa</button></div>
       </div>
       <input type="search" value={search} disabled={busy || !!batchId} onChange={e => setSearch(e.target.value)} placeholder="Sök namn eller kontakt" aria-label="Sök givare" className="my-3 w-full rounded-lg border p-2 text-sm" />
       {!group.length && <p className="text-sm">Inga givare har valt denna kanal.</p>}
       <div className="max-h-80 overflow-auto">{visible.map(r => <label key={r.id} className="flex items-center gap-2 border-t py-2 text-sm">
         <input type="checkbox" disabled={busy || !!batchId || !eligible.includes(r) || (!selected.includes(r.id) && selected.length >= 50)} checked={selected.includes(r.id)} onChange={e => setSelected(ids => e.target.checked ? [...ids, r.id] : ids.filter(id => id !== r.id))} />
-        <span>{r.full_name}</span><span className="ml-auto text-xs text-mosque-ink/60">{!recipientAddress(r, channel) ? 'Kontaktuppgifter behöver rättas' : channel === 'whatsapp' && template && r.preferred_language !== template.language ? 'Annat språk än mallen' : r.id.startsWith('profile:') ? 'Ny givarprofil' : ''}</span>
+        <span>{r.full_name}</span><span className="ml-auto text-xs text-mosque-ink/60">{!recipientAddress(r, channel) ? 'Kontaktuppgifter behöver rättas' : channel === 'sms' && !isSwedishSmsAddress(recipientAddress(r, 'sms')) ? 'Utanför Sverige – utesluten' : channel === 'whatsapp' && template && r.preferred_language !== template.language ? 'Annat språk än mallen' : r.id.startsWith('profile:') ? 'Ny givarprofil' : ''}</span>
       </label>)}</div>
     </div>
 

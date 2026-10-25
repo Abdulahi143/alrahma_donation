@@ -7,7 +7,7 @@ function load(name) {
   new Function('require','exports','module',code)(id => id === './communication' ? load('communication') : require(id),mod.exports,mod);
   return mod.exports;
 }
-const { recipientAddress } = load('communication');
+const { recipientAddress, isSwedishSmsAddress } = load('communication');
 const { providerStatus, sendSms, sendEmail, sendWhatsApp } = load('broadcast');
 const { profileRecipients, suppressOptedOutPhones } = load('broadcast-recipients');
 const donor = { email:' USER@EXAMPLE.COM ',phone:'0046 70 000 00 00',comm_email:true,comm_sms:true,comm_whatsapp:true,comm_opt_out:false };
@@ -16,6 +16,11 @@ assert.equal(recipientAddress(donor,'email'),'user@example.com');
 assert.equal(recipientAddress({...donor,comm_opt_out:true},'whatsapp'),null);
 assert.equal(recipientAddress({...donor,comm_sms:false},'sms'),null);
 assert.equal(recipientAddress({...donor,phone:'0700000000'},'sms'),null);
+assert.equal(isSwedishSmsAddress(recipientAddress(donor,'sms')),true);
+assert.equal(isSwedishSmsAddress(recipientAddress({...donor,phone:'+4741234567'},'sms')),false);
+assert.equal(isSwedishSmsAddress(recipientAddress({...donor,phone:'+12025550123'},'sms')),false);
+assert.equal(isSwedishSmsAddress(recipientAddress({...donor,phone:'0700000000'},'sms')),false);
+assert.equal(isSwedishSmsAddress('+460700000000'),false);
 const profile = {id:'profile-1',full_name:'Test Donor',phone:'+46700000000',email:null};
 const consent = (id,purpose,granted,created_at) => ({id,donor_id:'profile-1',purpose,granted,created_at});
 const profileRows = profileRecipients([profile],[
