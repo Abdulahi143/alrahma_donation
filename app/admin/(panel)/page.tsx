@@ -6,7 +6,23 @@ import { getOverview } from '@/lib/admin/queries';
 import { fmtSEK } from '@/lib/format';
 
 export default async function Overview() {
-  const o = await getOverview();
+  let o;
+  try {
+    o = await getOverview();
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("public.campaigns")) throw error;
+    return <div>
+      <PageHead title="Databasen behöver uppdateras" sub="Den nya adminpanelen väntar på kampanjtabellerna i Al-Rahmas Supabase-projekt." />
+      <Card className="space-y-3 text-sm">
+        <p>SQL-migrationerna från 13–14 oktober behöver köras i Al-Rahmas Supabase-projekt innan översikten kan visas.</p>
+        <p>SMS-utskick till givare som valt SMS kan användas via den befintliga givarlistan under tiden.</p>
+        <div className="flex flex-wrap gap-4 font-bold text-mosque-emerald">
+          <Link href="/admin/utskick" className="underline">Öppna Utskick</Link>
+          <Link href="/admin/legacy" className="underline">Öppna tidigare admin</Link>
+        </div>
+      </Card>
+    </div>;
+  }
   const { kpi, todo } = o;
 
   const tasks = [
