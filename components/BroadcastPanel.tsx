@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { BroadcastLogEntry } from '@/lib/types';
 import type { BroadcastRecipient } from '@/lib/broadcast-recipients';
 import { Channel, isSwedishSmsAddress, recipientAddress } from '@/lib/communication';
 
 type Template = { id: string; language: string; body: string };
+type SmsEstimate = { currency: string; estimatedCost: number; parts: number; recipients: number };
 const labels: Record<Channel, string> = { sms: 'SMS', email: 'E-post', whatsapp: 'WhatsApp' };
 const statuses: Record<string, string> = { sending: 'Pågår – kontrollera leverantören före nytt försök', accepted: 'Accepterat', partial: 'Delvis accepterat', failed: 'Misslyckat' };
 
@@ -23,6 +24,9 @@ export default function BroadcastPanel() {
   const [loaded, setLoaded] = useState(false);
   const [busy, setBusy] = useState(false);
   const [batchId, setBatchId] = useState<string | null>(null);
+  const [estimate, setEstimate] = useState<SmsEstimate | null>(null);
+  const [estimateError, setEstimateError] = useState('');
+  const reviewId = useRef<string | null>(null);
 
   const template = templates.find(t => `${t.id}:${t.language}` === templateKey);
   const group = recipients.filter(r => !r.comm_opt_out && r[`comm_${channel}`]);
@@ -53,8 +57,30 @@ export default function BroadcastPanel() {
 
   useEffect(() => { load().catch(() => setNotice('Kunde inte läsa utskick. Ladda om sidan.')); }, []);
 
+  async function fetchEstimate(id: string) {
+    setEstimate(null); setEstimateError('');
+    try {
+      const response = await fetch('/api/admin/broadcast/estimate', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: text, donorIds: chosen.map(r => r.id) })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Kunde inte beräkna kostnaden.');
+      if (result.recipients !== reach) throw new Error('Mottagarna har ändrats. Gå tillbaka och granska igen.');
+      if (reviewId.current === id) setEstimate(result);
+    } catch (error) {
+      if (reviewId.current === id) setEstimateError(error instanceof Error ? error.message : 'Kunde inte beräkna kostnaden.');
+    }
+  }
+
+  function beginReview() {
+    const id = crypto.randomUUID();
+    reviewId.current = id; setBatchId(id); setEstimate(null); setEstimateError('');
+    if (channel === 'sms') void fetchEstimate(id);
+  }
+
   async function send() {
-    if (!batchId || busy) return;
+    if (!batchId || busy || (channel === 'sms' && !estimate)) return;
     setBusy(true); setNotice('');
     try {
       const response = await fetch('/api/admin/broadcast', {
@@ -64,7 +90,7 @@ export default function BroadcastPanel() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Utskicket misslyckades.');
       setNotice(`${result.accepted} accepterade, ${result.failed} misslyckade eller okända.${result.excludedNonSwedish ? ` ${result.excludedNonSwedish} utländska nummer uteslöts.` : ''} Leverans är ännu inte bekräftad.${result.auditWarning ? ' Loggen kunde inte uppdateras; kontrollera 46elks.' : ''}`);
-      setBatchId(null); setSelected([]); setMessage('');
+      reviewId.current = null; setBatchId(null); setSelected([]); setMessage(''); setEstimate(null);
       try { await load(); } catch { setNotice('Utskicket behandlades. Historiken kunde inte uppdateras här; kontrollera 46elks.'); }
     } catch (error) {
       setNotice(`${error instanceof Error ? error.message : 'Anslutningen avbröts.'} Kontrollera historiken och 46elks innan du startar ett nytt utskick.`);
@@ -109,12 +135,15 @@ export default function BroadcastPanel() {
       </label>)}</div>
     </div>
 
-    {!batchId ? <button type="button" disabled={!canReview} onClick={() => setBatchId(crypto.randomUUID())} className="rounded-lg bg-mosque-emerald px-4 py-2 font-bold text-white disabled:opacity-40">Granska {labels[channel]} ({reach})</button> : <div className="space-y-3 rounded-xl border border-mosque-emerald bg-white p-4">
+    {!batchId ? <button type="button" disabled={!canReview} onClick={beginReview} className="rounded-lg bg-mosque-emerald px-4 py-2 font-bold text-white disabled:opacity-40">Granska {labels[channel]} ({reach})</button> : <div className="space-y-3 rounded-xl border border-mosque-emerald bg-white p-4">
       <h2 className="text-lg font-extrabold">Granska före utskick</h2>
       <p className="text-sm">{reach} unika {channel === 'email' ? 'e-postadresser' : 'nummer'} får meddelandet. Dubbletter skickas en gång.</p>
       <p className="text-sm text-mosque-ink/65">{chosen.map(r => `${r.full_name} (${(recipientAddress(r, channel) || '').slice(-4)})`).join(', ')}</p>
       <p className="whitespace-pre-wrap rounded-lg bg-mosque-cream p-3 text-sm">{text}</p>
-      <div className="flex flex-wrap gap-3"><button type="button" disabled={busy} onClick={send} className="rounded-lg bg-mosque-emerald px-4 py-2 font-bold text-white disabled:opacity-40">{busy ? 'Skickar…' : `Bekräfta och skicka ${labels[channel]} (${reach})`}</button><button type="button" disabled={busy} onClick={() => setBatchId(null)} className="rounded-lg border px-4 py-2">Ändra</button></div>
+      {channel === 'sms' && <div className="rounded-lg bg-mosque-cream p-3 text-sm" role="status">
+        {estimate ? <><strong>Uppskattad kostnad: {new Intl.NumberFormat('sv-SE', { style: 'currency', currency: estimate.currency, maximumFractionDigits: 4 }).format(estimate.estimatedCost / 10000)}</strong><p>{estimate.parts} SMS-delar till {estimate.recipients} nummer. 46elks slutliga kostnad kan skilja sig.</p></> : estimateError ? <><p>{estimateError} Inget SMS skickades.</p><button type="button" onClick={() => fetchEstimate(batchId)} className="mt-2 underline">Försök beräkna igen</button></> : <p>Beräknar kostnaden hos 46elks… Inget SMS skickas.</p>}
+      </div>}
+      <div className="flex flex-wrap gap-3"><button type="button" disabled={busy || (channel === 'sms' && !estimate)} onClick={send} className="rounded-lg bg-mosque-emerald px-4 py-2 font-bold text-white disabled:opacity-40">{busy ? 'Skickar…' : `Bekräfta och skicka ${labels[channel]} (${reach})`}</button><button type="button" disabled={busy} onClick={() => { reviewId.current = null; setBatchId(null); setEstimate(null); }} className="rounded-lg border px-4 py-2">Ändra</button></div>
     </div>}
 
     {notice && <p role="status" className="rounded-lg bg-white p-3 text-sm">{notice}</p>}

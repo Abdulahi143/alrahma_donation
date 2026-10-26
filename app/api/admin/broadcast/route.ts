@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/server';
 import { requireAdmin } from '@/lib/auth';
 import { providerStatus, sendSms, sendEmail, sendWhatsApp } from '@/lib/broadcast';
-import { Channel, isSwedishSmsAddress, recipientAddress } from '@/lib/communication';
+import { Channel } from '@/lib/communication';
 import { loadBroadcastRecipients } from '@/lib/broadcast-server';
+import { broadcastAddresses, recipientId } from '@/lib/broadcast-targets';
 
 export const maxDuration = 60;
-const recipientId = /^(legacy|profile):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const batchIdFormat = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function GET(req: NextRequest) {
@@ -46,9 +46,7 @@ export async function POST(req: NextRequest) {
   let donors;
   try { donors = await loadBroadcastRecipients(donorIds); }
   catch { return NextResponse.json({ error: 'Kunde inte läsa givarnas val.' }, { status: 500 }); }
-  const candidates = [...new Set(donors.filter(d => kind !== 'whatsapp' || d.preferred_language === language).map(d => recipientAddress(d, kind)).filter((address): address is string => !!address))];
-  const addresses = kind === 'sms' ? candidates.filter(isSwedishSmsAddress) : candidates;
-  const excludedNonSwedish = candidates.length - addresses.length;
+  const { addresses, excludedNonSwedish } = broadcastAddresses(donors, kind, language);
   if (!addresses.length) return NextResponse.json({ error: kind === 'sms' ? 'Inga valda givare har ett giltigt svenskt nummer (+46). Inget SMS skickades.' : 'Inga mottagare har valt denna kanal med giltiga kontaktuppgifter.' }, { status: 400 });
   const { data: log, error: logError } = await db.from('broadcast_log').insert({ id: batchId, channel, message: template?.body || message.trim(), recipient_count: addresses.length, simulated: false, status: 'sending' }).select().single();
   if (logError?.code === '23505') return NextResponse.json({ error: 'Utskicket har redan startats. Kontrollera historiken och 46elks innan du försöker igen.' }, { status: 409 });
