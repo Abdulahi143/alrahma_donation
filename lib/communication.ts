@@ -7,3 +7,7 @@ export function recipientAddress(donor: Contact, channel: Channel): string | nul
   const phone = donor.phone?.replace(/[\s()-]/g, '').replace(/^00/, '+');
   return phone && /^\+[1-9]\d{7,14}$/.test(phone) ? phone : null;
 }
+
+export function isSwedishSmsAddress(address: string | null): boolean {
+  return !!address && /^\+46[1-9]\d+$/.test(address);
+}
