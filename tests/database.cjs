@@ -6,7 +6,7 @@ const { PGlite } = require('@electric-sql/pglite');
   for (const mode of ['migrations', 'setup']) {
   const db = new PGlite();
   try {
-    await db.exec("create role anon; create role authenticated; create role service_role; create schema auth; create table auth.users(id uuid primary key); create function auth.uid() returns uuid language sql as 'select null::uuid'; create publication supabase_realtime;");
+    await db.exec("create role anon; create role authenticated; create role service_role; create schema auth; create table auth.users(id uuid primary key); create function auth.uid() returns uuid language sql as 'select null::uuid'; create schema storage; create table storage.buckets(id text primary key, name text, public boolean); create publication supabase_realtime;");
     const files = mode === 'setup' ? ['../setup.sql'] : fs.readdirSync('supabase/migrations').filter(f => f.endsWith('.sql')).sort();
     for (const file of files) {
       const sql = fs.readFileSync(`supabase/migrations/${file}`, 'utf8').replace(/create extension if not exists "pgcrypto";/i, '');

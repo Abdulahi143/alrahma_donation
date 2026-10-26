@@ -162,7 +162,7 @@ export default function AdminDashboard() {
             {tab === 'donations' && <DonationsLog donations={donations} onRefresh={refresh} />}
             {tab === 'donors' && <Donors donors={donors} donations={donations} plans={plans} onRefresh={() => refresh(true)} />}
             {tab === 'plans' && <Plans plans={plans} donations={donations} onRefresh={refresh} />}
-            {tab === 'broadcast' && <BroadcastPanel donors={donors} />}
+            {tab === 'broadcast' && <BroadcastPanel />}
             {tab === 'settings' && <Settings />}
             {tab === 'reports' && <Reports />}
           </>
