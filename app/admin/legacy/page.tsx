@@ -4,20 +4,18 @@ import { useEffect, useState } from 'react';
 import { fmtSEK } from '@/lib/format';
 import { supabaseBrowser } from '@/lib/supabase/client';
 import NotificationPanel from '@/components/NotificationPanel';
-import BroadcastPanel from '@/components/BroadcastPanel';
 import DonorDetails from '@/components/DonorDetails';
 import AdminIcon, { AdminIconName } from '@/components/AdminIcon';
 import { donorSummary, notificationChoices, planProgress } from '@/lib/donors';
 import { Donation, Donor, PaymentPlan, CampaignSettings } from '@/lib/types';
 
-type Tab = 'overview' | 'donations' | 'donors' | 'plans' | 'broadcast' | 'notifications' | 'settings' | 'reports';
+type Tab = 'overview' | 'donations' | 'donors' | 'plans' | 'notifications' | 'settings' | 'reports';
 
 const NAV: { key: Tab; label: string }[] = [
   { key: 'overview', label: 'Översikt' },
   { key: 'donations', label: 'Donationslogg' },
   { key: 'donors', label: 'Givare' },
   { key: 'plans', label: 'Betalningsplaner' },
-  { key: 'broadcast', label: 'Utskick' },
   { key: 'notifications', label: 'WhatsApp-aviseringar' },
   { key: 'settings', label: 'Betalkonton' },
   { key: 'reports', label: 'Rapporter' }
@@ -162,7 +160,6 @@ export default function AdminDashboard() {
             {tab === 'donations' && <DonationsLog donations={donations} onRefresh={refresh} />}
             {tab === 'donors' && <Donors donors={donors} donations={donations} plans={plans} onRefresh={() => refresh(true)} />}
             {tab === 'plans' && <Plans plans={plans} donations={donations} onRefresh={refresh} />}
-            {tab === 'broadcast' && <BroadcastPanel />}
             {tab === 'settings' && <Settings />}
             {tab === 'reports' && <Reports />}
           </>

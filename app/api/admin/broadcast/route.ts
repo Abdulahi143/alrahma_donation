@@ -10,7 +10,7 @@ export const maxDuration = 60;
 const batchIdFormat = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function GET(req: NextRequest) {
-  const guard = await requireAdmin(req);
+  const guard = await requireAdmin(req, 'owner');
   if (guard) return guard;
   const db = supabaseAdmin();
   const [history, templates, recipients] = await Promise.all([
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const guard = await requireAdmin(req);
+  const guard = await requireAdmin(req, 'owner');
   if (guard) return guard;
   let input;
   try { input = await req.json(); } catch { return NextResponse.json({ error: 'Ogiltigt meddelande.' }, { status: 400 }); }

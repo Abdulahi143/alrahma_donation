@@ -7,7 +7,7 @@ import { broadcastAddresses, recipientId } from '@/lib/broadcast-targets';
 export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
-  const guard = await requireAdmin(req);
+  const guard = await requireAdmin(req, 'owner');
   if (guard) return guard;
   let input;
   try { input = await req.json(); } catch { return NextResponse.json({ error: 'Ogiltig förfrågan.' }, { status: 400 }); }

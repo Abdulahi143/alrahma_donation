@@ -91,3 +91,15 @@ The nine migrations listed in section 1 have been applied. Hosting deployment an
 Set `ELKS_API_USERNAME`, `ELKS_API_PASSWORD`, and `ELKS_FROM` privately in the hosted app, then deploy this branch. Locally, the credentials were verified with one SMS to the developer's own number; no donor group was sent. The `AlRahma` text sender cannot receive replies.
 
 Admins open **Utskick** in the sidebar, choose SMS, write a donation update or reminder, select opted-in donors, review the exact text and unique recipient count, then confirm. The review fetches a no-send 46elks dry run for each unique number and shows the total estimated cost in the account currency and the number of SMS parts. Confirmation stays disabled if 46elks cannot estimate the cost. Mass SMS only permits normalized Swedish numbers (`+46`); foreign numbers are excluded in the admin and checked again by the API before sending. The app checks consent again, limits a batch to 50 donors, deduplicates phone numbers, and records provider acceptance in the history. Acceptance does not prove delivery, and the final cost can differ from the estimate. Check the 46elks balance before a larger send. If a request times out or shows **Pågår**, check 46elks and the history before starting a new batch.
+
+## 8. Owner access for Utskick — pending assignment
+
+Migration `202611010001_broadcast_owner.sql` adds `admins.role`. Existing admins default to `admin`; nobody becomes an Owner automatically. Before deploying the Owner gate, identify the two board-approved Owner accounts by their Supabase Auth login emails and match them to `admins.user_id`. In the SQL Editor, a read-only check is:
+
+```sql
+select u.email, a.user_id, a.full_name, a.role
+from public.admins a join auth.users u on u.id = a.user_id
+order by u.email;
+```
+
+Run the migration once, assign `role = 'owner'` to only the two verified `user_id` values, and verify both can open Utskick while another admin receives HTTP 403 from the broadcast and estimate APIs. Until that assignment is complete, Utskick fails closed for everyone. This role currently restricts Utskick only; it does not implement the later full Owner/Kassör/Läsare permissions plan. Do not assume that a name or the Meta app email identifies an admin login.
