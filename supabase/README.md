@@ -1,6 +1,6 @@
 # Supabase migrations
 
-Current project: `pqtetpitwmmzsmiflyjb`. `setup.sql` was applied there on 4 November 2026; do not run it again. This project started empty and currently has no Auth users or donor records. Local `.env.local` points to it. The historical migration notes below describe the previous project.
+Current project: `pqtetpitwmmzsmiflyjb`. `setup.sql` was applied there on 4 November 2026; do not run it again. This project started empty. Two confirmed Auth users now have Owner rows in `public.admins`; there are no donor records yet. Local `.env.local` points to it. The historical migration notes below describe the previous project.
 
 For a new, empty project, run `setup.sql` in the Supabase SQL Editor. It contains the ordered migrations, with their transaction boundaries. Run it once. Existing projects apply only unapplied migration files in filename order; see `DEPLOYMENT_HANDOFF.md`.
 

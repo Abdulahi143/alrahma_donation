@@ -2,7 +2,7 @@
 
 Deploy the current `feature/abdiaziz-development` branch (or merge it into the branch that your hosting deploys). The site is https://donera.alrahmaborlange.se/.
 
-**Current database (4 November 2026):** Use Supabase project `pqtetpitwmmzsmiflyjb`. Its empty database received `supabase/setup.sql` through the SQL Editor. Verification found 20 public tables, RLS on all 20, and the `admins.role` column. It has zero Auth users and zero donors. Local `.env.local` points to this project with its publishable and server secret keys; hosting variables still need the same project values. The prior project and its records were not copied. Do not rerun `setup.sql` here.
+**Current database (4 November 2026):** Use Supabase project `pqtetpitwmmzsmiflyjb`. Its empty database received `supabase/setup.sql` through the SQL Editor. Verification found 20 public tables, RLS on all 20, and the `admins.role` column. Two Auth users were created and assigned Owner; it has zero donors. Local `.env.local` points to this project with its publishable and server secret keys; hosting variables still need the same project values. The prior project and its records were not copied. Do not rerun `setup.sql` here.
 
 ## 1. Database status
 
@@ -94,9 +94,9 @@ Set `ELKS_API_USERNAME`, `ELKS_API_PASSWORD`, and `ELKS_FROM` privately in the h
 
 Owners open **Utskick** in the sidebar, choose SMS, write a donation update or reminder, select opted-in donors, review the exact text and unique recipient count, then confirm. The review fetches a no-send 46elks dry run for each unique number and shows the total estimated cost in the account currency and the number of SMS parts. Confirmation stays disabled if 46elks cannot estimate the cost. Mass SMS only permits normalized Swedish numbers (`+46`); foreign numbers are excluded in the admin and checked again by the API before sending. The app checks consent again, limits a batch to 50 donors, deduplicates phone numbers, and records provider acceptance in the history. Acceptance does not prove delivery, and the final cost can differ from the estimate. Check the 46elks balance before a larger send. If a request times out or shows **Pågår**, check 46elks and the history before starting a new batch.
 
-## 8. Owner access for Utskick — pending assignment
+## 8. Owner access for Utskick
 
-The fresh setup includes `admins.role`; `202611010001_broadcast_owner.sql` is only for an older database. New admins default to `admin`; nobody becomes an Owner automatically. This project currently has no Auth users. Create or invite the two intended admin logins, add their exact Auth IDs to `public.admins`, and verify their login emails before assigning Owner. In the SQL Editor, a read-only check is:
+The fresh setup includes `admins.role`; `202611010001_broadcast_owner.sql` is only for an older database. New admins default to `admin`; nobody becomes an Owner automatically. On 4 November 2026, `abdi000810@gmail.com` and `qaskaxaji143@gmail.com` were verified as confirmed Auth users and assigned Owner in `public.admins`. A read-only SQL check is:
 
 ```sql
 select u.email, a.user_id, a.full_name, a.role
@@ -104,4 +104,4 @@ from public.admins a join auth.users u on u.id = a.user_id
 order by u.email;
 ```
 
-Assign `role = 'owner'` to only the two verified `user_id` values, and verify both can open Utskick while another admin receives HTTP 403 from the broadcast and estimate APIs. Until that assignment is complete, Utskick fails closed for everyone. This role currently restricts Utskick only; it does not implement the later full Owner/Kassör/Läsare permissions plan. Do not assume that a name or the Meta app email identifies an admin login.
+The database returned exactly two Owner rows, and the local server key read the same two rows. Login and Utskick access still need an end-to-end check after the hosted app uses this project. The role currently restricts Utskick only; it does not implement the later full Owner/Kassör/Läsare permissions plan.
